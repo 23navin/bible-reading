@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase";
 import {
   CloseIcon,
@@ -31,6 +31,86 @@ export default function VoiceReview({
   const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const audioBufferRef = useRef<AudioBuffer | null>(null);
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const playStartedAtCtxTimeRef = useRef(0);
+  const offsetRef = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const Ctx =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    audioCtxRef.current = ctx;
+    (async () => {
+      try {
+        const arr = await blob.arrayBuffer();
+        const decoded = await new Promise<AudioBuffer>((resolve, reject) => {
+          ctx.decodeAudioData(arr.slice(0), resolve, reject);
+        });
+        if (cancelled) return;
+        audioBufferRef.current = decoded;
+      } catch (err) {
+        console.error("audio decode failed", err);
+        if (!cancelled) setError("Couldn't load audio for preview.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (sourceRef.current) {
+        try {
+          sourceRef.current.stop();
+        } catch {}
+        sourceRef.current = null;
+      }
+      ctx.close().catch(() => {});
+      audioCtxRef.current = null;
+      audioBufferRef.current = null;
+      offsetRef.current = 0;
+    };
+  }, [blob]);
+
+  const togglePlay = async () => {
+    const ctx = audioCtxRef.current;
+    const buffer = audioBufferRef.current;
+    if (!ctx || !buffer) return;
+    if (sourceRef.current) {
+      const elapsed = ctx.currentTime - playStartedAtCtxTimeRef.current;
+      offsetRef.current = Math.min(offsetRef.current + elapsed, buffer.duration);
+      try {
+        sourceRef.current.stop();
+      } catch {}
+      sourceRef.current = null;
+      setIsPlaying(false);
+      return;
+    }
+    if (ctx.state === "suspended") {
+      try {
+        await ctx.resume();
+      } catch {}
+    }
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    const offset = offsetRef.current >= buffer.duration ? 0 : offsetRef.current;
+    source.start(0, offset);
+    playStartedAtCtxTimeRef.current = ctx.currentTime;
+    offsetRef.current = offset;
+    sourceRef.current = source;
+    setIsPlaying(true);
+    source.onended = () => {
+      if (sourceRef.current === source) {
+        sourceRef.current = null;
+        offsetRef.current = 0;
+        setIsPlaying(false);
+      }
+    };
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -147,22 +227,56 @@ export default function VoiceReview({
       </header>
 
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 pb-4">
-        <audio controls src={URL.createObjectURL(blob)} className="h-10 w-full" />
-        <div className="rounded-2xl bg-zinc-800 p-4">
-          {reference ? (
-            <div className="mb-2 inline-flex rounded-full bg-zinc-700 px-3 py-1 text-sm font-semibold text-zinc-100">
-              {reference}
-            </div>
-          ) : null}
+        <div className="rounded-2xl bg-zinc-800 px-4 py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={togglePlay}
+              aria-label={isPlaying ? "Pause audio" : "Play audio"}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-700 text-zinc-100 active:scale-95"
+            >
+              {isPlaying ? (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" />
+                  <rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" />
+                </svg>
+              ) : (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path d="M8 5v14l12-7z" fill="currentColor" />
+                </svg>
+              )}
+            </button>
+            <input
+              type="text"
+              value={reference ?? ""}
+              onChange={(e) => {
+                setReference(e.target.value);
+                setPassage(null);
+              }}
+              placeholder="Reference"
+              className="min-w-0 flex-1 bg-transparent text-right text-sm font-semibold text-zinc-100 placeholder:text-zinc-500 outline-none"
+            />
+          </div>
           {transcribing ? (
-            <p className="text-sm text-zinc-400">Transcribing…</p>
+            <p className="mt-2 text-sm text-zinc-400">Transcribing…</p>
           ) : (
             <textarea
               value={transcript}
               onChange={(e) => setTranscript(e.target.value)}
               placeholder="Transcript will appear here"
               rows={4}
-              className="w-full resize-none rounded-xl bg-transparent text-[15px] text-zinc-100 placeholder:text-zinc-500 outline-none"
+              className="mt-2 w-full resize-none rounded-xl bg-transparent text-[15px] text-zinc-100 placeholder:text-zinc-500 outline-none"
             />
           )}
         </div>
