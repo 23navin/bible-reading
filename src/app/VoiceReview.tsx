@@ -264,7 +264,7 @@ export default function VoiceReview({
                 setReference(e.target.value);
                 setPassage(null);
               }}
-              placeholder="Reference"
+              placeholder="Passage Reference"
               className="min-w-0 flex-1 bg-transparent text-right text-sm font-semibold text-zinc-100 placeholder:text-zinc-500 outline-none"
             />
           </div>
@@ -274,7 +274,7 @@ export default function VoiceReview({
             <textarea
               value={transcript}
               onChange={(e) => setTranscript(e.target.value)}
-              placeholder="Transcript will appear here"
+              placeholder="Your thoughts..."
               rows={4}
               className="mt-2 w-full resize-none rounded-xl bg-transparent text-[15px] text-zinc-100 placeholder:text-zinc-500 outline-none"
             />
