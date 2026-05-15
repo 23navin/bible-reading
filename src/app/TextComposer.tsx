@@ -23,7 +23,6 @@ export default function TextComposer({
   const [text, setText] = useState("");
   const [reference, setReference] = useState<string | null>(null);
   const [passage, setPassage] = useState<ParsedPassage | null>(null);
-  const [parsing, setParsing] = useState(false);
   const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +38,6 @@ export default function TextComposer({
 
   async function parse() {
     if (!text.trim()) return;
-    setParsing(true);
     try {
       const res = await fetch("/api/parse-passage", {
         method: "POST",
@@ -48,12 +46,12 @@ export default function TextComposer({
       });
       if (res.ok) {
         const p = (await res.json()) as ParsedPassage;
-        setPassage(p);
-        setReference(p.reference);
+        if (p.reference) {
+          setPassage(p);
+          setReference(p.reference);
+        }
       }
-    } finally {
-      setParsing(false);
-    }
+    } catch {}
   }
 
   async function send() {
@@ -110,29 +108,39 @@ export default function TextComposer({
         >
           <CloseIcon className="h-6 w-6 text-zinc-300" />
         </button>
-        <span className="text-sm font-medium text-zinc-400">Write a log</span>
+        <span className="text-sm font-medium text-zinc-400">Review</span>
         <span className="w-10" />
       </header>
 
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 pb-4">
-        <div className="rounded-2xl bg-zinc-800 p-4">
-          {reference ? (
-            <div className="mb-2 inline-flex rounded-full bg-zinc-700 px-3 py-1 text-sm font-semibold text-zinc-100">
-              {reference}
-            </div>
-          ) : null}
+        <div className="rounded-2xl bg-zinc-800 px-4 py-2.5">
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-700 font-sans text-base italic text-zinc-100"
+            >
+              t
+            </span>
+            <input
+              type="text"
+              value={reference ?? ""}
+              onChange={(e) => {
+                setReference(e.target.value);
+                setPassage(null);
+              }}
+              placeholder="Passage Reference"
+              className="min-w-0 flex-1 bg-transparent text-left text-sm font-semibold text-zinc-100 placeholder:text-zinc-500 outline-none"
+            />
+          </div>
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             onBlur={parse}
-            placeholder="What did you read today?"
-            rows={8}
+            placeholder="Your thoughts..."
+            rows={4}
             autoFocus
-            className="w-full resize-none rounded-xl bg-transparent text-[15px] text-zinc-100 placeholder:text-zinc-500 outline-none"
+            className="mt-2 w-full resize-none rounded-xl bg-transparent text-[15px] text-zinc-100 placeholder:text-zinc-500 outline-none"
           />
-          {parsing ? (
-            <p className="text-xs text-zinc-500">Looking for a passage reference…</p>
-          ) : null}
         </div>
 
         <ShareTargets
@@ -145,18 +153,11 @@ export default function TextComposer({
 
         <div className="mt-auto flex gap-2 pt-2">
           <button
-            onClick={onClose}
-            disabled={sending}
-            className="flex-1 rounded-xl bg-zinc-800 px-4 py-3 font-medium text-zinc-200 active:bg-zinc-700 disabled:opacity-50"
-          >
-            Discard
-          </button>
-          <button
             onClick={send}
             disabled={sending || !text.trim()}
-            className="flex-[2] rounded-xl bg-blue-500 px-4 py-3 font-semibold text-white active:bg-blue-600 disabled:opacity-50"
+            className="flex h-20 w-full items-center justify-center rounded-md bg-zinc-300 font-semibold text-zinc-800 active:bg-blue-500/10 disabled:opacity-50"
           >
-            {sending ? "Sending…" : "Send"}
+            {sending ? "Logging…" : "Log Reading"}
           </button>
         </div>
       </div>

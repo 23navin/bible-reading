@@ -95,8 +95,8 @@ export default function MessageBubble({ message, isMine, currentUserId }: Props)
           isMine ? "bg-blue-500 text-white" : "bg-stone-200 text-stone-900"
         }`}
       >
-        {hasAudio || reference ? (
-          <div className="flex items-center justify-between gap-3">
+        {body || reference ? (
+          <div className="flex items-center gap-3">
             {hasAudio ? (
               <button
                 onClick={togglePlay}
@@ -119,7 +119,14 @@ export default function MessageBubble({ message, isMine, currentUserId }: Props)
                 )}
               </button>
             ) : (
-              <span />
+              <span
+                aria-hidden
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-serif text-base italic ${
+                  isMine ? "bg-white/20 text-white" : "bg-stone-300/70 text-stone-700"
+                }`}
+              >
+                t
+              </span>
             )}
             {reference ? (
               <div
@@ -133,11 +140,7 @@ export default function MessageBubble({ message, isMine, currentUserId }: Props)
           </div>
         ) : null}
         {body ? (
-          <p
-            className={`whitespace-pre-wrap text-[15px] leading-snug ${
-              hasAudio || reference ? "mt-2" : ""
-            }`}
-          >
+          <p className="mt-2 whitespace-pre-wrap text-[15px] leading-snug">
             {body}
           </p>
         ) : null}

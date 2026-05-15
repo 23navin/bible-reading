@@ -12,6 +12,15 @@ import {
 
 const VOICE_BUCKET = "audio-memos";
 
+function stripReferencePrefix(text: string, ref: string): string {
+  if (!text || !ref) return text;
+  const trimmed = text.trimStart();
+  if (!trimmed.toLowerCase().startsWith(ref.toLowerCase())) return text;
+  const rest = trimmed.slice(ref.length).replace(/^[\s,;:.\-—–]+/, "");
+  if (!rest) return "";
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
+
 export default function VoiceReview({
   me,
   chats,
@@ -139,6 +148,10 @@ export default function VoiceReview({
             if (cancelled) return;
             setPassage(p);
             setReference(p.reference);
+            if (p.reference) {
+              const cleaned = stripReferencePrefix(text, p.reference);
+              if (cleaned !== text) setTranscript(cleaned);
+            }
           }
         }
       } catch {
@@ -228,7 +241,7 @@ export default function VoiceReview({
 
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 pb-4">
         <div className="rounded-2xl bg-zinc-800 px-4 py-2.5">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
             <button
               onClick={togglePlay}
               aria-label={isPlaying ? "Pause audio" : "Play audio"}
@@ -265,7 +278,7 @@ export default function VoiceReview({
                 setPassage(null);
               }}
               placeholder="Passage Reference"
-              className="min-w-0 flex-1 bg-transparent text-right text-sm font-semibold text-zinc-100 placeholder:text-zinc-500 outline-none"
+              className="min-w-0 flex-1 bg-transparent text-left text-sm font-semibold text-zinc-100 placeholder:text-zinc-500 outline-none"
             />
           </div>
           {transcribing ? (
@@ -289,10 +302,10 @@ export default function VoiceReview({
         <div className="mt-auto flex gap-2 pt-2">
           <button
             onClick={send}
-            disabled={sending}
-            className="flex-[2] rounded-md bg-red-200 px-4 py-3 font-semibold text-zinc-800 active:bg-red-300 disabled:opacity-50"
+            disabled={sending || transcribing}
+            className="flex h-20 w-full items-center justify-center rounded-md bg-zinc-300 font-semibold text-zinc-800 active:bg-blue-500/10 disabled:opacity-50"
           >
-            {sending ? "Logging…" : "Log Reading"}
+            {sending ? "Logging…" : transcribing ? "Transcribing…" : "Log Reading"}
           </button>
         </div>
       </div>
