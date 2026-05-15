@@ -1,0 +1,226 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { createClient } from "@/lib/supabase";
+import type { Message } from "@/lib/types";
+
+// Assumes a public Supabase Storage bucket named "voice-memos".
+const VOICE_BUCKET = "audio-memos";
+
+type Props = {
+  chatId: string;
+  currentUserId: string;
+  onOptimistic: (m: Message) => void;
+  onReconcile: (optimisticId: string, realId: string) => void;
+};
+
+type ParsedPassage = {
+  book: string | null;
+  chapter: number | null;
+  verse_start: number | null;
+  verse_end: number | null;
+  reference: string | null;
+};
+
+async function parsePassage(text: string): Promise<ParsedPassage> {
+  try {
+    const res = await fetch("/api/parse-passage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) throw new Error("parse failed");
+    return await res.json();
+  } catch {
+    return { book: null, chapter: null, verse_start: null, verse_end: null, reference: null };
+  }
+}
+
+async function transcribe(blob: Blob): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", new File([blob], "memo.webm", { type: blob.type || "audio/webm" }));
+  const res = await fetch("/api/transcribe", { method: "POST", body: fd });
+  if (!res.ok) throw new Error("transcribe failed");
+  const { text } = (await res.json()) as { text: string };
+  return text;
+}
+
+export default function Composer({ chatId, currentUserId, onOptimistic, onReconcile }: Props) {
+  const [supabase] = useState(() => createClient());
+  const [text, setText] = useState("");
+  const [recording, setRecording] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      rec.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
+        await sendVoice(blob);
+      };
+      rec.start();
+      recorderRef.current = rec;
+      setRecording(true);
+    } catch (err) {
+      console.error(err);
+      alert("Microphone access denied.");
+    }
+  };
+
+  const stopRecording = () => {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    setRecording(false);
+  };
+
+  const sendVoice = async (blob: Blob) => {
+    setBusy(true);
+    try {
+      const ext = blob.type.includes("mp4") ? "m4a" : "webm";
+      const path = `${currentUserId}/${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from(VOICE_BUCKET)
+        .upload(path, blob, { contentType: blob.type, upsert: false });
+      if (upErr) throw upErr;
+
+      const transcript = await transcribe(blob).catch(() => "");
+      const passage = transcript ? await parsePassage(transcript) : null;
+
+      await insertMessage({
+        note: null,
+        voice_path: path,
+        transcript: transcript || null,
+        passage,
+      });
+    } catch (err) {
+      console.error(err);
+      alert("Couldn't send voice memo.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sendText = async () => {
+    const value = text.trim();
+    if (!value) return;
+    setText("");
+    setBusy(true);
+    try {
+      const passage = await parsePassage(value);
+      await insertMessage({
+        note: value,
+        voice_path: null,
+        transcript: null,
+        passage,
+      });
+    } catch (err) {
+      console.error(err);
+      alert("Couldn't send.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const insertMessage = async (args: {
+    note: string | null;
+    voice_path: string | null;
+    transcript: string | null;
+    passage: ParsedPassage | null;
+  }) => {
+    const optimisticId = `tmp-${crypto.randomUUID()}`;
+    const optimistic: Message = {
+      id: optimisticId,
+      chat_id: chatId,
+      user_id: currentUserId,
+      reference: args.passage?.reference ?? null,
+      book: args.passage?.book ?? null,
+      chapter: args.passage?.chapter ?? null,
+      verse_start: args.passage?.verse_start ?? null,
+      verse_end: args.passage?.verse_end ?? null,
+      note: args.note,
+      voice_path: args.voice_path,
+      transcript: args.transcript,
+      created_at: new Date().toISOString(),
+      reactions: [],
+      replies: [],
+    };
+    onOptimistic(optimistic);
+
+    const { data: inserted, error } = await supabase
+      .from("messages")
+      .insert({
+        user_id: currentUserId,
+        reference: args.passage?.reference ?? null,
+        book: args.passage?.book ?? null,
+        chapter: args.passage?.chapter ?? null,
+        verse_start: args.passage?.verse_start ?? null,
+        verse_end: args.passage?.verse_end ?? null,
+        note: args.note,
+        voice_path: args.voice_path,
+        transcript: args.transcript,
+      })
+      .select("id")
+      .single();
+
+    if (error || !inserted) throw error ?? new Error("insert failed");
+
+    onReconcile(optimisticId, inserted.id);
+
+    const { error: shareErr } = await supabase
+      .from("message_shares")
+      .insert({ message_id: inserted.id, chat_id: chatId, shared_by: currentUserId });
+
+    if (shareErr) throw shareErr;
+  };
+
+  return (
+    <div className="border-t border-stone-200 bg-white px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <div className="flex items-end gap-2">
+        <button
+          type="button"
+          onClick={recording ? stopRecording : startRecording}
+          disabled={busy}
+          aria-label={recording ? "Stop recording" : "Record voice"}
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg ${
+            recording ? "bg-red-500 text-white" : "bg-stone-200 text-stone-700"
+          } active:scale-95 disabled:opacity-50`}
+        >
+          {recording ? "■" : "🎤"}
+        </button>
+
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              sendText();
+            }
+          }}
+          placeholder={recording ? "Recording…" : "Share what you read"}
+          rows={1}
+          disabled={recording || busy}
+          className="max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-stone-200 bg-stone-50 px-4 py-2 text-[15px] outline-none focus:border-stone-400 disabled:opacity-60"
+        />
+
+        <button
+          type="button"
+          onClick={sendText}
+          disabled={!text.trim() || busy || recording}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white active:scale-95 disabled:opacity-40"
+          aria-label="Send"
+        >
+          ↑
+        </button>
+      </div>
+    </div>
+  );
+}
