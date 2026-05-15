@@ -189,11 +189,14 @@ export default function Composer({ chatId, currentUserId, onOptimistic, onReconc
           onClick={recording ? stopRecording : startRecording}
           disabled={busy}
           aria-label={recording ? "Stop recording" : "Record voice"}
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg ${
-            recording ? "bg-red-500 text-white" : "bg-stone-200 text-stone-700"
-          } active:scale-95 disabled:opacity-50`}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-stone-200 transition-transform duration-150 active:scale-95 disabled:opacity-50"
         >
-          {recording ? "■" : "🎤"}
+          <span
+            style={{ willChange: "transform, border-radius" }}
+            className={`block h-5 w-5 bg-red-500 transition-[transform,border-radius] duration-300 ease-out ${
+              recording ? "scale-[0.7] rounded-[4px]" : "rounded-full"
+            }`}
+          />
         </button>
 
         <textarea
@@ -215,7 +218,7 @@ export default function Composer({ chatId, currentUserId, onOptimistic, onReconc
           type="button"
           onClick={sendText}
           disabled={!text.trim() || busy || recording}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white active:scale-95 disabled:opacity-40"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white transition-transform duration-150 active:scale-95 disabled:opacity-40"
           aria-label="Send"
         >
           ↑
