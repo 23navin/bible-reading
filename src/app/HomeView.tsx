@@ -45,7 +45,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
 
   return (
     <main className="flex h-full flex-col bg-zinc-900 text-zinc-100">
-      <header className="flex items-center justify-between px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
+      <header className="flex items-center justify-between px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
         <h1 className="text-2xl font-semibold tracking-tight">
           <span className="text-white">{displayName}</span>'s Reading Log
         </h1>
@@ -58,20 +58,15 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
         </Link>
       </header>
 
-      <section className="flex-1 overflow-y-auto px-4">
-        {chats.length === 0 ? (
-          <p className="mt-16 text-center text-sm text-zinc-500">
-            No chats yet. Tap “new chat” below to start one.
-          </p>
-        ) : (
+      <section className="flex-1 overflow-y-auto px-8">
           <ul className="flex flex-col gap-1 py-4">
             {chats.map((c) => (
               <li key={c.id}>
                 <Link
                   href={`/chat/${c.id}`}
-                  className="flex items-center gap-3 rounded-xl px-2 py-2 active:bg-zinc-800"
+                  className="relative flex items-center gap-3 rounded-md py-2 active:bg-zinc-800"
                 >
-                  <UnreadDot active={c.hasUnread} />
+                  <UnreadDot active={c.hasUnread} className="absolute -left-4 top-1/2 -translate-y-1/2" />
                   <span className="text-lg text-zinc-100">{c.name}</span>
                   <AvatarStack members={c.members} />
                 </Link>
@@ -80,14 +75,12 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
             <li>
               <Link
                 href="/chats/new"
-                className="flex items-center gap-3 rounded-xl px-2 py-2 text-zinc-400 active:bg-zinc-800"
+                className="flex items-center rounded-md py-2 text-zinc-400 active:bg-zinc-800"
               >
-                <UnreadDot active={false} />
                 <span className="text-lg">new chat</span>
               </Link>
             </li>
           </ul>
-        )}
       </section>
 
       {mode === "idle" ? (
@@ -131,13 +124,13 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
   );
 }
 
-function UnreadDot({ active }: { active: boolean }) {
+function UnreadDot({ active, className = "" }: { active: boolean; className?: string }) {
   return (
     <span
       aria-hidden
       className={`h-2 w-2 shrink-0 rounded-full ${
         active ? "bg-blue-500" : "bg-transparent"
-      }`}
+      } ${className}`}
     />
   );
 }
