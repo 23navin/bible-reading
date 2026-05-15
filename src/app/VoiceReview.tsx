@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase";
 import {
-  CloseIcon,
+  DiscardButton,
   ShareTargets,
   type ChatSummary,
   type Me,
@@ -26,11 +26,13 @@ export default function VoiceReview({
   chats,
   blob,
   onClose,
+  exiting = false,
 }: {
   me: Me;
   chats: ChatSummary[];
   blob: Blob;
   onClose: () => void;
+  exiting?: boolean;
 }) {
   const [supabase] = useState(() => createClient());
   const [transcript, setTranscript] = useState("");
@@ -226,17 +228,13 @@ export default function VoiceReview({
   }
 
   return (
-    <div className="absolute inset-0 z-30 flex flex-col bg-zinc-900 text-zinc-100">
-      <header className="flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2">
-        <button
-          onClick={onClose}
-          aria-label="Close"
-          className="rounded-full p-2 active:bg-zinc-800"
-        >
-          <CloseIcon className="h-6 w-6 text-zinc-300" />
-        </button>
-        <span className="text-sm font-medium text-zinc-400">Review</span>
-        <span className="w-10" />
+    <div
+      className={`absolute inset-0 z-30 flex flex-col bg-zinc-900 text-zinc-100 ${
+        exiting ? "screen-fade-out" : "screen-fade-in"
+      }`}
+    >
+      <header className="flex items-center justify-end px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
+        <DiscardButton onDiscard={onClose} />
       </header>
 
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 pb-4">

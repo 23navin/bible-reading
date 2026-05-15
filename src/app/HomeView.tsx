@@ -21,6 +21,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
   const [blob, setBlob] = useState<Blob | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
+  const [exiting, setExiting] = useState(false);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -32,8 +33,17 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
   };
   const openText = () => setMode("text");
   const closeOverlay = () => {
-    setMode("idle");
-    setBlob(null);
+    if (mode === "review" || mode === "text") {
+      setExiting(true);
+      setTimeout(() => {
+        setMode("idle");
+        setBlob(null);
+        setExiting(false);
+      }, 200);
+    } else {
+      setMode("idle");
+      setBlob(null);
+    }
   };
 
   useEffect(() => {
@@ -104,6 +114,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
 
   const displayName = me.display_name ?? me.username ?? "friend";
   const recording = mode === "recording";
+  const overlayActive = mode === "review" || mode === "text" || exiting;
 
   return (
     <main className="flex h-full min-h-0 flex-col bg-zinc-900 text-zinc-100">
@@ -139,13 +150,17 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
 
       <section className="min-h-0 flex-1 overflow-y-auto px-8">
         {recording ? (
-          <div className="flex h-full items-center justify-center">
+          <div className="screen-fade-in flex h-full items-center justify-center">
             <p className="text-center italic text-md text-zinc-600">
               start by saying the passage
             </p>
           </div>
         ) : (
-          <ul className="flex flex-col gap-1 py-4">
+          <ul
+            className={`flex flex-col gap-1 py-4 ${
+              overlayActive ? "" : "screen-fade-in"
+            }`}
+          >
             {chats.map((c) => (
               <li key={c.id}>
                 <Link
@@ -173,7 +188,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
         )}
       </section>
 
-      {mode === "idle" || recording ? (
+      {mode === "idle" || recording || exiting ? (
         <div className="shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
           <p
             aria-hidden={!recording}
@@ -218,10 +233,16 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
       ) : null}
 
       {mode === "review" && blob ? (
-        <VoiceReview me={me} chats={chats} blob={blob} onClose={closeOverlay} />
+        <VoiceReview
+          me={me}
+          chats={chats}
+          blob={blob}
+          onClose={closeOverlay}
+          exiting={exiting}
+        />
       ) : null}
       {mode === "text" ? (
-        <TextComposer me={me} chats={chats} onClose={closeOverlay} />
+        <TextComposer me={me} chats={chats} onClose={closeOverlay} exiting={exiting} />
       ) : null}
     </main>
   );
