@@ -138,7 +138,6 @@ export default function TextComposer({
             onBlur={parse}
             placeholder="Your thoughts..."
             rows={4}
-            autoFocus
             className="mt-2 w-full resize-none rounded-xl bg-transparent text-[15px] text-zinc-100 placeholder:text-zinc-500 outline-none"
           />
         </div>
