@@ -47,7 +47,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
     <main className="flex h-full flex-col bg-zinc-900 text-zinc-100">
       <header className="flex items-center justify-between px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
         <h1 className="text-2xl font-semibold tracking-tight">
-          Hi <span className="text-white">{displayName}</span>
+          <span className="text-white">{displayName}</span>'s Reading Log
         </h1>
         <Link
           href="/archive"
@@ -93,24 +93,30 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
       {mode === "idle" ? (
         <nav className="grid grid-cols-3 gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
           <ViewTransition name={VOICE_MORPH_NAME} share="composer-morph">
-            <button
-              onClick={openVoice}
-              aria-label="Record voice log"
-              className="col-span-2 flex h-20 items-center justify-center rounded-2xl border border-red-500 bg-transparent active:bg-red-500/10"
-            >
-              <span aria-hidden className="block h-6 w-6 rounded-full bg-red-500" />
-            </button>
+            <div className="col-span-2">
+              <button
+                type="button"
+                onClick={openVoice}
+                aria-label="Record voice log"
+                className="flex h-20 w-full items-center justify-center rounded-md border border-red-500 bg-transparent active:bg-red-500/10"
+              >
+                <span aria-hidden className="block h-6 w-6 rounded-full bg-red-500" />
+              </button>
+            </div>
           </ViewTransition>
           <ViewTransition name={TEXT_MORPH_NAME} share="composer-morph">
-            <button
-              onClick={openText}
-              aria-label="Type a log"
-              className="flex h-20 items-center justify-center rounded-2xl border border-dashed border-zinc-400 bg-transparent text-zinc-100 active:bg-zinc-800"
-            >
-              <span aria-hidden className="font-serif text-3xl italic lowercase leading-none">
-                t
-              </span>
-            </button>
+            <div>
+              <button
+                type="button"
+                onClick={openText}
+                aria-label="Type a log"
+                className="flex h-20 w-full items-center justify-center rounded-md border border-dashed border-zinc-400 bg-transparent text-zinc-100 active:bg-zinc-800"
+              >
+                <span aria-hidden className="font-serif text-3xl italic lowercase leading-none">
+                  t
+                </span>
+              </button>
+            </div>
           </ViewTransition>
         </nav>
       ) : null}
