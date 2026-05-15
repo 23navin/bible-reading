@@ -20,6 +20,13 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
+/* Tailwind v4 preflight applies `appearance: button`, which lets iOS Safari
+   draw native button chrome over our backgrounds and rings. Strip it. */
+button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 /* View Transitions: morph the record/type button into the full-screen composer.
    Activated when state changes are wrapped in startTransition(). */
 ::view-transition-group(.composer-morph) {
@@ -35,11 +42,30 @@ body {
   }
 }
 
+@keyframes screen-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes screen-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.screen-fade-in {
+  animation: screen-fade-in 200ms ease-out;
+}
+.screen-fade-out {
+  animation: screen-fade-out 200ms ease-out forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-old(*),
   ::view-transition-new(*),
   ::view-transition-group(*) {
     animation-duration: 0s !important;
     animation-delay: 0s !important;
+  }
+  .screen-fade-in,
+  .screen-fade-out {
+    animation-duration: 0s !important;
   }
 }
