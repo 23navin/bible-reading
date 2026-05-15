@@ -41,7 +41,7 @@ yarn-error.log*
 next-env.d.ts
 
 
-migrations
+migrations/
 .mcp.json
 AGENTS.MD
 CLAUDE.MD
