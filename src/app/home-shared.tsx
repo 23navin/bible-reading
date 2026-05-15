@@ -47,38 +47,132 @@ export function ShareTargets({
 }) {
   return (
     <div>
-      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
-        Also share to
+      <p className="text-sm font-medium tracking-wide text-zinc-200">
+        Share With
       </p>
       {chats.length === 0 ? (
         <p className="text-sm text-zinc-500">
-          No chats yet — this will save to your archive only.
+          No chats yet — this will save to your personal log only.
         </p>
       ) : (
-        <div className="flex flex-wrap gap-2">
+        <ul className="flex flex-col gap-1">
           {chats.map((c) => {
             const on = selected.has(c.id);
             return (
-              <button
-                key={c.id}
-                onClick={() => onToggle(c.id)}
-                className={`rounded-full border px-3 py-1.5 text-sm ${
-                  on
-                    ? "border-blue-500 bg-blue-500 text-white"
-                    : "border-zinc-700 bg-zinc-800 text-zinc-200"
-                }`}
-              >
-                {c.name}
-              </button>
+              <li key={c.id}>
+                <button
+                  type="button"
+                  onClick={() => onToggle(c.id)}
+                  aria-pressed={on}
+                  className={`flex w-full items-center gap-3 rounded-md py-2 pr-2 text-left active:bg-zinc-800 ${
+                    on ? "bg-zinc-800" : ""
+                  }`}
+                >
+                  <span className="mx-3 text-lg text-zinc-100">{c.name}</span>
+                  <AvatarStack members={c.members} />
+                  <span className="ml-auto flex h-5 w-5 shrink-0 items-center justify-center">
+                    {on ? (
+                      <CheckIcon className="h-5 w-5 text-red-200" />
+                    ) : (
+                      <span className="block h-4 w-4 rounded-xs border border-zinc-600" />
+                    )}
+                  </span>
+                </button>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
       <p className="mt-2 text-xs text-zinc-500">
         {selected.size === 0
-          ? "Saves to your archive only."
-          : `Saves to archive + ${selected.size} chat${selected.size === 1 ? "" : "s"}.`}
+          ? "Saves to your personal log only."
+          : `Saves to your personal log + Shares with ${selected.size} chat${selected.size === 1 ? "" : "s"}.`}
       </p>
     </div>
+  );
+}
+
+export function AvatarStack({ members }: { members: Member[] }) {
+  const shown = members.slice(0, 4);
+  const overflow = members.length - shown.length;
+  return (
+    <div className="ml-1 flex items-center">
+      {shown.map((m, i) => (
+        <div
+          key={m.id}
+          style={{
+            marginLeft: i === 0 ? 0 : -10,
+            zIndex: shown.length - i,
+            borderRadius: 8,
+          }}
+          className="ring-2 ring-zinc-900"
+        >
+          <Avatar name={m.display_name ?? "?"} id={m.id} size={28} />
+        </div>
+      ))}
+      {overflow > 0 ? (
+        <div
+          style={{ marginLeft: -10, zIndex: 0, borderRadius: 8 }}
+          className="flex h-7 w-7 items-center justify-center bg-zinc-700 text-[10px] font-semibold text-zinc-200 ring-2 ring-zinc-900"
+        >
+          +{overflow}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function Avatar({
+  name,
+  id,
+  size,
+}: {
+  name: string;
+  id: string;
+  size: number;
+}) {
+  const initial = (name?.trim()?.[0] ?? "?").toUpperCase();
+  const bg = avatarColor(id);
+  return (
+    <div
+      style={{ width: size, height: size, backgroundColor: bg, fontSize: size * 0.42, borderRadius: 8 }}
+      className="flex items-center justify-center font-semibold text-white select-none"
+    >
+      {initial}
+    </div>
+  );
+}
+
+const AVATAR_PALETTE = [
+  "#ef4444",
+  "#f97316",
+  "#eab308",
+  "#22c55e",
+  "#14b8a6",
+  "#0ea5e9",
+  "#6366f1",
+  "#a855f7",
+  "#ec4899",
+];
+function avatarColor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return AVATAR_PALETTE[h % AVATAR_PALETTE.length];
+}
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M5 12l5 5L20 7" />
+    </svg>
   );
 }

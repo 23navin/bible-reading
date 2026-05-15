@@ -288,18 +288,11 @@ export default function VoiceReview({
         {error ? <p className="text-sm text-red-400">{error}</p> : null}
         <div className="mt-auto flex gap-2 pt-2">
           <button
-            onClick={onClose}
-            disabled={sending}
-            className="flex-1 rounded-xl bg-zinc-800 px-4 py-3 font-medium text-zinc-200 active:bg-zinc-700 disabled:opacity-50"
-          >
-            Discard
-          </button>
-          <button
             onClick={send}
             disabled={sending}
-            className="flex-[2] rounded-xl bg-blue-500 px-4 py-3 font-semibold text-white active:bg-blue-600 disabled:opacity-50"
+            className="flex-[2] rounded-md bg-red-200 px-4 py-3 font-semibold text-zinc-800 active:bg-red-300 disabled:opacity-50"
           >
-            {sending ? "Sending…" : "Send"}
+            {sending ? "Logging…" : "Log Reading"}
           </button>
         </div>
       </div>
