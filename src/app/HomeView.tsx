@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ViewTransition, useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase";
 
 const VOICE_BUCKET = "audio-memos";
@@ -19,8 +19,7 @@ export type Me = {
   display_name: string | null;
 };
 
-type Mode = "idle" | "voice" | "text";
-type VoiceStage = "recording" | "review";
+type Mode = "idle" | "recording" | "review" | "text";
 
 type ParsedPassage = {
   book: string | null;
@@ -30,35 +29,128 @@ type ParsedPassage = {
   reference: string | null;
 };
 
-const VOICE_MORPH_NAME = "composer-voice";
-const TEXT_MORPH_NAME = "composer-text";
-
 export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }) {
   const [mode, setMode] = useState<Mode>("idle");
-  const [, startTransition] = useTransition();
+  const [blob, setBlob] = useState<Blob | null>(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [micError, setMicError] = useState<string | null>(null);
 
-  const openVoice = () => startTransition(() => setMode("voice"));
-  const openText = () => startTransition(() => setMode("text"));
-  const closeOverlay = () => startTransition(() => setMode("idle"));
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const startedAtRef = useRef<number | null>(null);
+
+  const openVoice = () => {
+    setMicError(null);
+    setMode("recording");
+  };
+  const openText = () => setMode("text");
+  const closeOverlay = () => {
+    setMode("idle");
+    setBlob(null);
+  };
+
+  useEffect(() => {
+    if (mode !== "recording") return;
+
+    let aborted = false;
+    let activeRec: MediaRecorder | null = null;
+
+    (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (aborted) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        const rec = new MediaRecorder(stream);
+        activeRec = rec;
+        chunksRef.current = [];
+        rec.ondataavailable = (e) => {
+          if (e.data.size > 0) chunksRef.current.push(e.data);
+        };
+        rec.onstop = () => {
+          stream.getTracks().forEach((t) => t.stop());
+          if (aborted) return;
+          const b = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
+          setBlob(b);
+          setMode("review");
+        };
+        rec.start();
+        startedAtRef.current = Date.now();
+        setElapsedMs(0);
+        recorderRef.current = rec;
+      } catch {
+        if (!aborted) {
+          setMicError("Microphone access denied.");
+          setMode("idle");
+        }
+      }
+    })();
+
+    return () => {
+      aborted = true;
+      if (recorderRef.current === activeRec) recorderRef.current = null;
+      if (activeRec && activeRec.state !== "inactive") activeRec.stop();
+    };
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "recording") return;
+    const id = setInterval(() => {
+      if (startedAtRef.current != null) {
+        setElapsedMs(Date.now() - startedAtRef.current);
+      }
+    }, 250);
+    return () => clearInterval(id);
+  }, [mode]);
+
+  function stopRecording() {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+  }
 
   const displayName = me.display_name ?? me.username ?? "friend";
+  const recording = mode === "recording";
 
   return (
     <main className="flex h-full flex-col bg-zinc-900 text-zinc-100">
-      <header className="flex items-center justify-between px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          <span className="text-white">{displayName}</span>'s Reading Log
+      <header className="relative flex items-center justify-between px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
+        <h1
+          className={`text-2xl font-semibold tracking-tight transition-opacity duration-300 ${
+            recording ? "opacity-0" : "opacity-100"
+          }`}
+        >
+          <span className="text-white">{displayName}</span>&apos;s Reading Log
         </h1>
         <Link
           href="/archive"
           aria-label="Open your archive"
-          className="rounded-full ring-1 ring-zinc-700 active:ring-zinc-500"
+          tabIndex={recording ? -1 : 0}
+          className={`rounded-full ring-1 ring-zinc-700 active:ring-zinc-500 transition-opacity duration-300 ${
+            recording ? "pointer-events-none opacity-0" : "opacity-100"
+          }`}
         >
           <Avatar name={displayName} id={me.id} size={40} />
         </Link>
+        <button
+          type="button"
+          onClick={closeOverlay}
+          aria-label="Cancel recording"
+          tabIndex={recording ? 0 : -1}
+          className={`absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-2 active:bg-zinc-800 transition-opacity duration-300 ${
+            recording ? "opacity-100" : "pointer-events-none opacity-0"
+          }`}
+        >
+          <CloseIcon className="h-6 w-6 text-zinc-300" />
+        </button>
       </header>
 
-      <section className="flex-1 overflow-y-auto px-8">
+      <section className="relative flex-1">
+        <div
+          className={`absolute inset-0 overflow-y-auto px-8 transition-opacity duration-300 ${
+            recording ? "pointer-events-none opacity-0" : "opacity-100"
+          }`}
+        >
           <ul className="flex flex-col gap-1 py-4">
             {chats.map((c) => (
               <li key={c.id}>
@@ -66,7 +158,10 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
                   href={`/chat/${c.id}`}
                   className="relative flex items-center gap-3 rounded-md py-2 active:bg-zinc-800"
                 >
-                  <UnreadDot active={c.hasUnread} className="absolute -left-4 top-1/2 -translate-y-1/2" />
+                  <UnreadDot
+                    active={c.hasUnread}
+                    className="absolute -left-4 top-1/2 -translate-y-1/2"
+                  />
                   <span className="text-lg text-zinc-100">{c.name}</span>
                   <AvatarStack members={c.members} />
                 </Link>
@@ -81,41 +176,65 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
               </Link>
             </li>
           </ul>
+        </div>
+        <div
+          aria-hidden={!recording}
+          className={`pointer-events-none absolute inset-0 flex items-center justify-center px-8 transition-opacity duration-300 ${
+            recording ? "opacity-100" : "opacity-0"
+          }`}
+        >
+          <p className="text-center italic text-lg text-zinc-400">
+            start by saying the passage
+          </p>
+        </div>
       </section>
 
-      {mode === "idle" ? (
-        <nav className="grid grid-cols-3 gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
-          <ViewTransition name={VOICE_MORPH_NAME} share="composer-morph">
-            <div className="col-span-2">
-              <button
-                type="button"
-                onClick={openVoice}
-                aria-label="Record voice log"
-                className="flex h-20 w-full items-center justify-center rounded-md border border-red-500 bg-transparent active:bg-red-500/10"
-              >
-                <span aria-hidden className="block h-6 w-6 rounded-full bg-red-500" />
-              </button>
-            </div>
-          </ViewTransition>
-          <ViewTransition name={TEXT_MORPH_NAME} share="composer-morph">
-            <div>
-              <button
-                type="button"
-                onClick={openText}
-                aria-label="Type a log"
-                className="flex h-20 w-full items-center justify-center rounded-md border border-dashed border-zinc-400 bg-transparent text-zinc-100 active:bg-zinc-800"
-              >
-                <span aria-hidden className="font-serif text-3xl italic lowercase leading-none">
-                  t
-                </span>
-              </button>
-            </div>
-          </ViewTransition>
-        </nav>
+      {mode === "idle" || recording ? (
+        <div className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
+          <p
+            aria-hidden={!recording}
+            className={`mb-2 text-center text-sm tabular-nums text-zinc-400 transition-opacity duration-300 ${
+              recording ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            {formatElapsed(elapsedMs)}
+          </p>
+          <div className="flex">
+            <button
+              type="button"
+              onClick={recording ? stopRecording : openVoice}
+              aria-label={recording ? "Stop recording" : "Record voice log"}
+              className="flex h-20 min-w-0 flex-1 items-center justify-center rounded-md border border-red-500 bg-transparent active:bg-red-500/10"
+            >
+              <span
+                aria-hidden
+                className={`block h-8 w-8 bg-red-500 transition-[border-radius] duration-300 ${
+                  recording ? "rounded-sm" : "rounded-full"
+                }`}
+              />
+            </button>
+            <button
+              type="button"
+              onClick={openText}
+              disabled={recording}
+              tabIndex={recording ? -1 : 0}
+              aria-label="Type a log"
+              aria-hidden={recording}
+              className={`flex h-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-dashed border-zinc-400 bg-transparent text-zinc-300 transition-[width,margin-left,border-width] duration-300 ease-out ${
+                recording ? "ml-0 w-0 border-0" : "ml-3 w-20"
+              }`}
+            >
+              <KeyboardIcon className="h-7 w-7 shrink-0" />
+            </button>
+          </div>
+          {micError ? (
+            <p className="pt-3 text-center text-sm text-red-400">{micError}</p>
+          ) : null}
+        </div>
       ) : null}
 
-      {mode === "voice" ? (
-        <VoiceComposer me={me} chats={chats} onClose={closeOverlay} />
+      {mode === "review" && blob ? (
+        <VoiceReview me={me} chats={chats} blob={blob} onClose={closeOverlay} />
       ) : null}
       {mode === "text" ? (
         <TextComposer me={me} chats={chats} onClose={closeOverlay} />
@@ -186,15 +305,15 @@ function Avatar({
 }
 
 const AVATAR_PALETTE = [
-  "#ef4444", // red
-  "#f97316", // orange
-  "#eab308", // amber
-  "#22c55e", // green
-  "#14b8a6", // teal
-  "#0ea5e9", // sky
-  "#6366f1", // indigo
-  "#a855f7", // purple
-  "#ec4899", // pink
+  "#ef4444",
+  "#f97316",
+  "#eab308",
+  "#22c55e",
+  "#14b8a6",
+  "#0ea5e9",
+  "#6366f1",
+  "#a855f7",
+  "#ec4899",
 ];
 function avatarColor(seed: string): string {
   let h = 0;
@@ -202,49 +321,60 @@ function avatarColor(seed: string): string {
   return AVATAR_PALETTE[h % AVATAR_PALETTE.length];
 }
 
-function MicIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
-      <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z" />
-    </svg>
-  );
-}
-function TextIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
-      <path d="M5 4h14v2h-6v14h-2V6H5V4Z" />
-    </svg>
-  );
-}
 function CloseIcon({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={className} aria-hidden>
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      className={className}
+      aria-hidden
+    >
       <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
     </svg>
   );
 }
-function StopIcon({ className }: { className?: string }) {
+
+function KeyboardIcon({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
-      <rect x="6" y="6" width="12" height="12" rx="2" />
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <rect x="2" y="6" width="20" height="13" rx="2" />
+      <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14.5h10" />
     </svg>
   );
 }
 
-// ---------- Voice composer ----------
+function formatElapsed(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
-function VoiceComposer({
+// ---------- Voice review ----------
+
+function VoiceReview({
   me,
   chats,
+  blob,
   onClose,
 }: {
   me: Me;
   chats: ChatSummary[];
+  blob: Blob;
   onClose: () => void;
 }) {
   const [supabase] = useState(() => createClient());
-  const [stage, setStage] = useState<VoiceStage>("recording");
-  const [blob, setBlob] = useState<Blob | null>(null);
   const [transcript, setTranscript] = useState("");
   const [transcribing, setTranscribing] = useState(false);
   const [reference, setReference] = useState<string | null>(null);
@@ -253,80 +383,46 @@ function VoiceComposer({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const cancelledRef = useRef(false);
-
-  const runTranscribe = async (b: Blob) => {
-    setTranscribing(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", new File([b], "memo.webm", { type: b.type || "audio/webm" }));
-      const res = await fetch("/api/transcribe", { method: "POST", body: fd });
-      if (!res.ok) throw new Error("transcribe failed");
-      const { text } = (await res.json()) as { text: string };
-      setTranscript(text);
-
-      if (text) {
-        const pRes = await fetch("/api/parse-passage", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
-        });
-        if (pRes.ok) {
-          const p = (await pRes.json()) as ParsedPassage;
-          setPassage(p);
-          setReference(p.reference);
-        }
-      }
-    } catch {
-      setError("Couldn't transcribe. You can still send the recording.");
-    } finally {
-      setTranscribing(false);
-    }
-  };
-
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      setTranscribing(true);
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
+        const fd = new FormData();
+        fd.append(
+          "file",
+          new File([blob], "memo.webm", { type: blob.type || "audio/webm" }),
+        );
+        const res = await fetch("/api/transcribe", { method: "POST", body: fd });
+        if (!res.ok) throw new Error("transcribe failed");
+        const { text } = (await res.json()) as { text: string };
+        if (cancelled) return;
+        setTranscript(text);
+
+        if (text) {
+          const pRes = await fetch("/api/parse-passage", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+          });
+          if (pRes.ok) {
+            const p = (await pRes.json()) as ParsedPassage;
+            if (cancelled) return;
+            setPassage(p);
+            setReference(p.reference);
+          }
         }
-        const rec = new MediaRecorder(stream);
-        chunksRef.current = [];
-        rec.ondataavailable = (e) => {
-          if (e.data.size > 0) chunksRef.current.push(e.data);
-        };
-        rec.onstop = () => {
-          stream.getTracks().forEach((t) => t.stop());
-          if (cancelledRef.current) return;
-          const b = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
-          setBlob(b);
-          setStage("review");
-          void runTranscribe(b);
-        };
-        rec.start();
-        recorderRef.current = rec;
       } catch {
-        if (!cancelled) setError("Microphone access denied.");
+        if (!cancelled)
+          setError("Couldn't transcribe. You can still send the recording.");
+      } finally {
+        if (!cancelled) setTranscribing(false);
       }
     })();
     return () => {
       cancelled = true;
-      cancelledRef.current = true;
-      const rec = recorderRef.current;
-      recorderRef.current = null;
-      if (rec && rec.state !== "inactive") rec.stop();
     };
-  }, []);
-
-  function stopRecording() {
-    recorderRef.current?.stop();
-    recorderRef.current = null;
-  }
+  }, [blob]);
 
   function toggleChat(id: string) {
     setSelectedChatIds((prev) => {
@@ -338,7 +434,6 @@ function VoiceComposer({
   }
 
   async function send() {
-    if (!blob) return;
     setSending(true);
     setError(null);
     try {
@@ -372,7 +467,9 @@ function VoiceComposer({
           chat_id,
           shared_by: me.id,
         }));
-        const { error: shareErr } = await supabase.from("message_shares").insert(shareRows);
+        const { error: shareErr } = await supabase
+          .from("message_shares")
+          .insert(shareRows);
         if (shareErr) throw shareErr;
       }
 
@@ -387,94 +484,63 @@ function VoiceComposer({
   }
 
   return (
-    <ViewTransition name={VOICE_MORPH_NAME} share="composer-morph">
-      <div className="absolute inset-0 z-30 flex flex-col bg-zinc-900 text-zinc-100">
-        <header className="flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2">
+    <div className="absolute inset-0 z-30 flex flex-col bg-zinc-900 text-zinc-100">
+      <header className="flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2">
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="rounded-full p-2 active:bg-zinc-800"
+        >
+          <CloseIcon className="h-6 w-6 text-zinc-300" />
+        </button>
+        <span className="text-sm font-medium text-zinc-400">Review</span>
+        <span className="w-10" />
+      </header>
+
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 pb-4">
+        <audio controls src={URL.createObjectURL(blob)} className="h-10 w-full" />
+        <div className="rounded-2xl bg-zinc-800 p-4">
+          {reference ? (
+            <div className="mb-2 inline-flex rounded-full bg-zinc-700 px-3 py-1 text-sm font-semibold text-zinc-100">
+              {reference}
+            </div>
+          ) : null}
+          {transcribing ? (
+            <p className="text-sm text-zinc-400">Transcribing…</p>
+          ) : (
+            <textarea
+              value={transcript}
+              onChange={(e) => setTranscript(e.target.value)}
+              placeholder="Transcript will appear here"
+              rows={4}
+              className="w-full resize-none rounded-xl bg-transparent text-[15px] text-zinc-100 placeholder:text-zinc-500 outline-none"
+            />
+          )}
+        </div>
+        <ShareTargets
+          chats={chats}
+          selected={selectedChatIds}
+          onToggle={toggleChat}
+        />
+        {error ? <p className="text-sm text-red-400">{error}</p> : null}
+        <div className="mt-auto flex gap-2 pt-2">
           <button
-            onClick={() => {
-              cancelledRef.current = true;
-              onClose();
-            }}
-            aria-label="Close"
-            className="rounded-full p-2 active:bg-zinc-800"
+            onClick={onClose}
+            disabled={sending}
+            className="flex-1 rounded-xl bg-zinc-800 px-4 py-3 font-medium text-zinc-200 active:bg-zinc-700 disabled:opacity-50"
           >
-            <CloseIcon className="h-6 w-6 text-zinc-300" />
+            Discard
           </button>
-          <span className="text-sm font-medium text-zinc-400">
-            {stage === "recording" ? "Recording…" : "Review"}
-          </span>
-          <span className="w-10" />
-        </header>
-
-        {stage === "recording" ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6">
-            <div className="h-32 w-32 animate-pulse rounded-full bg-red-500/20" />
-            <button
-              onClick={stopRecording}
-              aria-label="Stop recording"
-              className="flex h-20 w-20 items-center justify-center rounded-full bg-red-500 text-white shadow-lg active:scale-95"
-            >
-              <StopIcon className="h-8 w-8" />
-            </button>
-            <p className="text-sm text-zinc-400">Tap to stop</p>
-          </div>
-        ) : null}
-
-        {stage === "review" && blob ? (
-          <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 pb-4">
-            <audio
-              controls
-              src={URL.createObjectURL(blob)}
-              className="h-10 w-full"
-            />
-            <div className="rounded-2xl bg-zinc-800 p-4">
-              {reference ? (
-                <div className="mb-2 inline-flex rounded-full bg-zinc-700 px-3 py-1 text-sm font-semibold text-zinc-100">
-                  {reference}
-                </div>
-              ) : null}
-              {transcribing ? (
-                <p className="text-sm text-zinc-400">Transcribing…</p>
-              ) : (
-                <textarea
-                  value={transcript}
-                  onChange={(e) => setTranscript(e.target.value)}
-                  placeholder="Transcript will appear here"
-                  rows={4}
-                  className="w-full resize-none rounded-xl bg-transparent text-[15px] text-zinc-100 placeholder:text-zinc-500 outline-none"
-                />
-              )}
-            </div>
-            <ShareTargets
-              chats={chats}
-              selected={selectedChatIds}
-              onToggle={toggleChat}
-            />
-            {error ? <p className="text-sm text-red-400">{error}</p> : null}
-            <div className="mt-auto flex gap-2 pt-2">
-              <button
-                onClick={onClose}
-                disabled={sending}
-                className="flex-1 rounded-xl bg-zinc-800 px-4 py-3 font-medium text-zinc-200 active:bg-zinc-700 disabled:opacity-50"
-              >
-                Discard
-              </button>
-              <button
-                onClick={send}
-                disabled={sending}
-                className="flex-[2] rounded-xl bg-blue-500 px-4 py-3 font-semibold text-white active:bg-blue-600 disabled:opacity-50"
-              >
-                {sending ? "Sending…" : "Send"}
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {stage === "recording" && error ? (
-          <p className="px-5 pb-4 text-center text-sm text-red-400">{error}</p>
-        ) : null}
+          <button
+            onClick={send}
+            disabled={sending}
+            className="flex-[2] rounded-xl bg-blue-500 px-4 py-3 font-semibold text-white active:bg-blue-600 disabled:opacity-50"
+          >
+            {sending ? "Sending…" : "Send"}
+          </button>
+        </div>
       </div>
-    </ViewTransition>
+    </div>
   );
 }
 
@@ -554,7 +620,9 @@ function TextComposer({
           chat_id,
           shared_by: me.id,
         }));
-        const { error: shareErr } = await supabase.from("message_shares").insert(shareRows);
+        const { error: shareErr } = await supabase
+          .from("message_shares")
+          .insert(shareRows);
         if (shareErr) throw shareErr;
       }
 
@@ -569,68 +637,66 @@ function TextComposer({
   }
 
   return (
-    <ViewTransition name={TEXT_MORPH_NAME} share="composer-morph">
-      <div className="absolute inset-0 z-30 flex flex-col bg-zinc-900 text-zinc-100">
-        <header className="flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2">
+    <div className="absolute inset-0 z-30 flex flex-col bg-zinc-900 text-zinc-100">
+      <header className="flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2">
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="rounded-full p-2 active:bg-zinc-800"
+        >
+          <CloseIcon className="h-6 w-6 text-zinc-300" />
+        </button>
+        <span className="text-sm font-medium text-zinc-400">Write a log</span>
+        <span className="w-10" />
+      </header>
+
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 pb-4">
+        <div className="rounded-2xl bg-zinc-800 p-4">
+          {reference ? (
+            <div className="mb-2 inline-flex rounded-full bg-zinc-700 px-3 py-1 text-sm font-semibold text-zinc-100">
+              {reference}
+            </div>
+          ) : null}
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onBlur={parse}
+            placeholder="What did you read today?"
+            rows={8}
+            autoFocus
+            className="w-full resize-none rounded-xl bg-transparent text-[15px] text-zinc-100 placeholder:text-zinc-500 outline-none"
+          />
+          {parsing ? (
+            <p className="text-xs text-zinc-500">Looking for a passage reference…</p>
+          ) : null}
+        </div>
+
+        <ShareTargets
+          chats={chats}
+          selected={selectedChatIds}
+          onToggle={toggleChat}
+        />
+
+        {error ? <p className="text-sm text-red-400">{error}</p> : null}
+
+        <div className="mt-auto flex gap-2 pt-2">
           <button
             onClick={onClose}
-            aria-label="Close"
-            className="rounded-full p-2 active:bg-zinc-800"
+            disabled={sending}
+            className="flex-1 rounded-xl bg-zinc-800 px-4 py-3 font-medium text-zinc-200 active:bg-zinc-700 disabled:opacity-50"
           >
-            <CloseIcon className="h-6 w-6 text-zinc-300" />
+            Discard
           </button>
-          <span className="text-sm font-medium text-zinc-400">Write a log</span>
-          <span className="w-10" />
-        </header>
-
-        <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 pb-4">
-          <div className="rounded-2xl bg-zinc-800 p-4">
-            {reference ? (
-              <div className="mb-2 inline-flex rounded-full bg-zinc-700 px-3 py-1 text-sm font-semibold text-zinc-100">
-                {reference}
-              </div>
-            ) : null}
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onBlur={parse}
-              placeholder="What did you read today?"
-              rows={8}
-              autoFocus
-              className="w-full resize-none rounded-xl bg-transparent text-[15px] text-zinc-100 placeholder:text-zinc-500 outline-none"
-            />
-            {parsing ? (
-              <p className="text-xs text-zinc-500">Looking for a passage reference…</p>
-            ) : null}
-          </div>
-
-          <ShareTargets
-            chats={chats}
-            selected={selectedChatIds}
-            onToggle={toggleChat}
-          />
-
-          {error ? <p className="text-sm text-red-400">{error}</p> : null}
-
-          <div className="mt-auto flex gap-2 pt-2">
-            <button
-              onClick={onClose}
-              disabled={sending}
-              className="flex-1 rounded-xl bg-zinc-800 px-4 py-3 font-medium text-zinc-200 active:bg-zinc-700 disabled:opacity-50"
-            >
-              Discard
-            </button>
-            <button
-              onClick={send}
-              disabled={sending || !text.trim()}
-              className="flex-[2] rounded-xl bg-blue-500 px-4 py-3 font-semibold text-white active:bg-blue-600 disabled:opacity-50"
-            >
-              {sending ? "Sending…" : "Send"}
-            </button>
-          </div>
+          <button
+            onClick={send}
+            disabled={sending || !text.trim()}
+            className="flex-[2] rounded-xl bg-blue-500 px-4 py-3 font-semibold text-white active:bg-blue-600 disabled:opacity-50"
+          >
+            {sending ? "Sending…" : "Send"}
+          </button>
         </div>
       </div>
-    </ViewTransition>
+    </div>
   );
 }
 
