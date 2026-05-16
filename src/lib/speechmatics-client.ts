@@ -218,7 +218,7 @@ export class SpeechmaticsSession {
         },
         "punctuation_overrides": {
             "permitted_marks": ["all"],
-            "sensitivity": 0.8
+            "sensitivity": 0.7
         }
 
       },

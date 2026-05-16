@@ -7,14 +7,14 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 export async function POST(request: Request) {
   const { text } = (await request.json()) as { text?: string };
   if (!text || !text.trim()) {
-    return NextResponse.json({ reference: null, book: null, chapter: null, verse_start: null, verse_end: null });
+    return NextResponse.json({ reference: null, book: null, chapter: null, verse_start: null, verse_end: null, matched_text: null });
   }
 
   let result;
   try {
     result = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 200,
+      max_tokens: 256,
       system: PARSE_PASSAGE_SYSTEM,
       messages: [{ role: "user", content: text }],
     });
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     const detail = err instanceof Error ? err.message : String(err);
     console.warn("parse-passage anthropic call failed", { text, detail });
     return NextResponse.json(
-      { reference: null, book: null, chapter: null, verse_start: null, verse_end: null },
+      { reference: null, book: null, chapter: null, verse_start: null, verse_end: null, matched_text: null },
       { status: 200 },
     );
   }
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   } catch {
     console.warn("parse-passage bad JSON", { text, raw });
     return NextResponse.json(
-      { reference: null, book: null, chapter: null, verse_start: null, verse_end: null },
+      { reference: null, book: null, chapter: null, verse_start: null, verse_end: null, matched_text: null },
       { status: 200 },
     );
   }

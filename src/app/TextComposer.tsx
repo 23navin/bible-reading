@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase";
 import {
   DiscardButton,
   ShareTargets,
+  applyReferenceReplacement,
   type ChatSummary,
   type Me,
   type ParsedPassage,
@@ -61,11 +62,12 @@ export default function TextComposer({
     setSending(true);
     setError(null);
     try {
+      const note = applyReferenceReplacement(text, passage);
       const { data: inserted, error: insErr } = await supabase
         .from("messages")
         .insert({
           user_id: me.id,
-          note: text,
+          note,
           voice_path: null,
           transcript: null,
           reference,

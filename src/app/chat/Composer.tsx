@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase";
 import { SpeechmaticsSession } from "@/lib/speechmatics-client";
 import type { Message } from "@/lib/types";
+import { applyReferenceReplacement, type ParsedPassage } from "../home-shared";
 
 // Assumes a public Supabase Storage bucket named "voice-memos".
 const VOICE_BUCKET = "audio-memos";
@@ -13,14 +14,6 @@ type Props = {
   currentUserId: string;
   onOptimistic: (m: Message) => void;
   onReconcile: (optimisticId: string, realId: string) => void;
-};
-
-type ParsedPassage = {
-  book: string | null;
-  chapter: number | null;
-  verse_start: number | null;
-  verse_end: number | null;
-  reference: string | null;
 };
 
 async function parsePassage(text: string): Promise<ParsedPassage> {
@@ -33,7 +26,7 @@ async function parsePassage(text: string): Promise<ParsedPassage> {
     if (!res.ok) throw new Error("parse failed");
     return await res.json();
   } catch {
-    return { book: null, chapter: null, verse_start: null, verse_end: null, reference: null };
+    return { book: null, chapter: null, verse_start: null, verse_end: null, reference: null, matched_text: null };
   }
 }
 
@@ -152,6 +145,7 @@ export default function Composer({ chatId, currentUserId, onOptimistic, onReconc
         transcript = await transcribe(blob).catch(() => "");
         passage = transcript ? await parsePassage(transcript) : null;
       }
+      transcript = applyReferenceReplacement(transcript, passage);
 
       await insertMessage({
         note: null,
@@ -175,7 +169,7 @@ export default function Composer({ chatId, currentUserId, onOptimistic, onReconc
     try {
       const passage = await parsePassage(value);
       await insertMessage({
-        note: value,
+        note: applyReferenceReplacement(value, passage),
         voice_path: null,
         transcript: null,
         passage,

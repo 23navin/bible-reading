@@ -5,21 +5,13 @@ import { createClient } from "@/lib/supabase";
 import {
   DiscardButton,
   ShareTargets,
+  applyReferenceReplacement,
   type ChatSummary,
   type Me,
   type ParsedPassage,
 } from "./home-shared";
 
 const VOICE_BUCKET = "audio-memos";
-
-function stripReferencePrefix(text: string, ref: string): string {
-  if (!text || !ref) return text;
-  const trimmed = text.trimStart();
-  if (!trimmed.toLowerCase().startsWith(ref.toLowerCase())) return text;
-  const rest = trimmed.slice(ref.length).replace(/^[\s,;:.\-—–]+/, "");
-  if (!rest) return "";
-  return rest.charAt(0).toUpperCase() + rest.slice(1);
-}
 
 export default function VoiceReview({
   me,
@@ -45,11 +37,9 @@ export default function VoiceReview({
 }) {
   const hasRealtime = typeof initialTranscript === "string";
   const [supabase] = useState(() => createClient());
-  const [transcript, setTranscript] = useState(() => {
-    const t = initialTranscript ?? "";
-    const ref = initialPassage?.reference ?? null;
-    return ref ? stripReferencePrefix(t, ref) : t;
-  });
+  const [transcript, setTranscript] = useState(() =>
+    applyReferenceReplacement(initialTranscript ?? "", initialPassage ?? null),
+  );
   const [transcribing, setTranscribing] = useState(!hasRealtime);
   const [reference, setReference] = useState<string | null>(
     initialPassage?.reference ?? null,
@@ -70,7 +60,7 @@ export default function VoiceReview({
     const t = initialTranscript ?? "";
     const ref = initialPassage?.reference ?? null;
     if (!userEditedTranscriptRef.current) {
-      setTranscript(ref ? stripReferencePrefix(t, ref) : t);
+      setTranscript(applyReferenceReplacement(t, initialPassage ?? null));
     }
     if (!userEditedReferenceRef.current) {
       setReference(ref);
@@ -203,10 +193,8 @@ export default function VoiceReview({
             if (cancelled) return;
             setPassage(p);
             setReference(p.reference);
-            if (p.reference) {
-              const cleaned = stripReferencePrefix(text, p.reference);
-              if (cleaned !== text) setTranscript(cleaned);
-            }
+            const cleaned = applyReferenceReplacement(text, p);
+            if (cleaned !== text) setTranscript(cleaned);
           }
         }
       } catch {
