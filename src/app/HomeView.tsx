@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import VoiceReview from "./VoiceReview";
 import TextComposer from "./TextComposer";
+import { SpeechmaticsSession } from "@/lib/speechmatics-client";
 import {
   Avatar,
   AvatarStack,
   CloseIcon,
   type ChatSummary,
   type Me,
+  type ParsedPassage,
 } from "./home-shared";
 
 export type { ChatSummary, Me, Member } from "./home-shared";
@@ -19,16 +21,33 @@ type Mode = "idle" | "recording" | "review" | "text";
 export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }) {
   const [mode, setMode] = useState<Mode>("idle");
   const [blob, setBlob] = useState<Blob | null>(null);
+  const [realtimeTranscript, setRealtimeTranscript] = useState<string | null>(null);
+  const [realtimePassage, setRealtimePassage] = useState<ParsedPassage | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
   const [exiting, setExiting] = useState(false);
+  const [recordingReady, setRecordingReady] = useState(false);
+  const [stopping, setStopping] = useState(false);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const startedAtRef = useRef<number | null>(null);
+  const sessionRef = useRef<SpeechmaticsSession | null>(null);
+  const finalTextRef = useRef("");
+  const parsedRef = useRef<ParsedPassage | null>(null);
+  const parseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const parseAbortRef = useRef<AbortController | null>(null);
+  const realtimeFailedRef = useRef(false);
 
   const openVoice = () => {
     setMicError(null);
+    finalTextRef.current = "";
+    parsedRef.current = null;
+    realtimeFailedRef.current = false;
+    setRealtimeTranscript(null);
+    setRealtimePassage(null);
+    setRecordingReady(false);
+    setStopping(false);
     setMode("recording");
   };
   const openText = () => setMode("text");
@@ -38,11 +57,15 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
       setTimeout(() => {
         setMode("idle");
         setBlob(null);
+        setRealtimeTranscript(null);
+        setRealtimePassage(null);
         setExiting(false);
       }, 200);
     } else {
       setMode("idle");
       setBlob(null);
+      setRealtimeTranscript(null);
+      setRealtimePassage(null);
     }
   };
 
@@ -51,6 +74,87 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
 
     let aborted = false;
     let activeRec: MediaRecorder | null = null;
+
+    // Mint the Speechmatics token in parallel with the start animation and
+    // mic-permission prompt so it's ready when SpeechmaticsSession needs it.
+    const tokenPromise: Promise<string | undefined> = fetch(
+      "/api/speechmatics-token",
+      { method: "POST" },
+    )
+      .then((r) => (r.ok ? (r.json() as Promise<{ token: string }>) : null))
+      .then((d) => d?.token)
+      .catch(() => undefined);
+
+    const runParse = async () => {
+      if (parsedRef.current?.reference) return;
+      const text = finalTextRef.current.trim();
+      if (!text) return;
+      parseAbortRef.current?.abort();
+      const ac = new AbortController();
+      parseAbortRef.current = ac;
+      try {
+        const res = await fetch("/api/parse-passage", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+          signal: ac.signal,
+        });
+        if (!res.ok) return;
+        const p = (await res.json()) as ParsedPassage;
+        if (parseAbortRef.current === ac && p.reference) {
+          parsedRef.current = p;
+        }
+      } catch {
+        // Aborted or network error — leave for a later attempt or fallback.
+      }
+    };
+
+    const scheduleParse = () => {
+      if (parsedRef.current?.reference) return;
+      if (parseTimerRef.current) clearTimeout(parseTimerRef.current);
+      parseTimerRef.current = setTimeout(() => {
+        void runParse();
+      }, 500);
+    };
+
+    const finalizeAndOpenReview = async (recordedBlob: Blob) => {
+      setBlob(recordedBlob);
+
+      const session = sessionRef.current;
+      sessionRef.current = null;
+      if (session && !realtimeFailedRef.current) {
+        try {
+          const finalText = await session.stop();
+          if (finalText) finalTextRef.current = finalText;
+        } catch (err) {
+          console.error("speechmatics stop failed", err);
+          realtimeFailedRef.current = true;
+        }
+      } else if (session) {
+        session.abort();
+      }
+
+      if (parseTimerRef.current) {
+        clearTimeout(parseTimerRef.current);
+        parseTimerRef.current = null;
+      }
+      if (
+        !realtimeFailedRef.current &&
+        finalTextRef.current &&
+        !parsedRef.current?.reference
+      ) {
+        await runParse();
+      }
+
+      if (!realtimeFailedRef.current && finalTextRef.current) {
+        setRealtimeTranscript(finalTextRef.current);
+        setRealtimePassage(parsedRef.current);
+      } else {
+        setRealtimeTranscript(null);
+        setRealtimePassage(null);
+      }
+      setMode("review");
+    };
 
     // Let the morph + keyboard-collapse transition (300ms) finish before
     // touching getUserMedia / MediaRecorder. On iOS these block the main
@@ -66,6 +170,9 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
           const rec = new MediaRecorder(stream);
           activeRec = rec;
           chunksRef.current = [];
+          finalTextRef.current = "";
+          parsedRef.current = null;
+          realtimeFailedRef.current = false;
           rec.ondataavailable = (e) => {
             if (e.data.size > 0) chunksRef.current.push(e.data);
           };
@@ -73,13 +180,47 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
             stream.getTracks().forEach((t) => t.stop());
             if (aborted) return;
             const b = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
-            setBlob(b);
-            setMode("review");
+            void finalizeAndOpenReview(b);
           };
+
+          // Bring Speechmatics up BEFORE the recorder so the live transcript
+          // captures the first words the user speaks. Otherwise the recorder
+          // captures audio for the ~hundreds of ms it takes the websocket
+          // handshake to complete, but those samples never reach the live
+          // transcription.
+          const session = new SpeechmaticsSession({
+            onFinal: (full) => {
+              finalTextRef.current = full;
+              scheduleParse();
+            },
+            onError: (err) => {
+              console.error("speechmatics error", err);
+              realtimeFailedRef.current = true;
+            },
+          });
+          try {
+            const token = await tokenPromise;
+            await session.start(stream, token ? { token } : undefined);
+            if (aborted) {
+              session.abort();
+              stream.getTracks().forEach((t) => t.stop());
+              return;
+            }
+            sessionRef.current = session;
+          } catch (err) {
+            console.error("speechmatics start failed", err);
+            realtimeFailedRef.current = true;
+          }
+
+          if (aborted) {
+            stream.getTracks().forEach((t) => t.stop());
+            return;
+          }
           rec.start();
           startedAtRef.current = Date.now();
           setElapsedMs(0);
           recorderRef.current = rec;
+          setRecordingReady(true);
         } catch {
           if (!aborted) {
             setMicError("Microphone access denied.");
@@ -94,6 +235,16 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
       clearTimeout(initTimer);
       if (recorderRef.current === activeRec) recorderRef.current = null;
       if (activeRec && activeRec.state !== "inactive") activeRec.stop();
+      if (sessionRef.current) {
+        sessionRef.current.abort();
+        sessionRef.current = null;
+      }
+      if (parseTimerRef.current) {
+        clearTimeout(parseTimerRef.current);
+        parseTimerRef.current = null;
+      }
+      parseAbortRef.current?.abort();
+      parseAbortRef.current = null;
     };
   }, [mode]);
 
@@ -108,6 +259,14 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
   }, [mode]);
 
   function stopRecording() {
+    if (!recordingReady) {
+      // User tapped the (already-morphed) button before the session finished
+      // connecting. Treat it as a cancel rather than a silent no-op.
+      setMode("idle");
+      return;
+    }
+    if (stopping) return;
+    setStopping(true);
     recorderRef.current?.stop();
     recorderRef.current = null;
   }
@@ -152,7 +311,11 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
         {recording ? (
           <div className="screen-fade-in flex h-full items-center justify-center">
             <p className="text-center italic text-md text-zinc-600">
-              start by saying the passage
+              {stopping
+                ? "finishing up…"
+                : recordingReady
+                  ? "start by saying the passage"
+                  : "connecting…"}
             </p>
           </div>
         ) : (
@@ -194,14 +357,15 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
             aria-hidden={!recording}
             className="mb-2 text-center text-sm tabular-nums text-zinc-400"
           >
-            {recording ? formatElapsed(elapsedMs) : " "}
+            {recording && recordingReady ? formatElapsed(elapsedMs) : " "}
           </p>
           <div className="flex">
             <button
               type="button"
               onClick={recording ? stopRecording : openVoice}
+              disabled={recording && stopping}
               aria-label={recording ? "Stop recording" : "Record voice log"}
-              className="flex h-20 min-w-0 flex-1 items-center justify-center rounded-md border border-red-500 bg-transparent active:bg-red-500/10"
+              className="flex h-20 min-w-0 flex-1 items-center justify-center rounded-md border border-red-500 bg-transparent active:bg-red-500/10 disabled:opacity-60"
             >
               <span
                 aria-hidden
@@ -237,6 +401,8 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
           me={me}
           chats={chats}
           blob={blob}
+          initialTranscript={realtimeTranscript}
+          initialPassage={realtimePassage}
           onClose={closeOverlay}
           exiting={exiting}
         />

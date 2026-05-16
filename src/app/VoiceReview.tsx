@@ -25,20 +25,35 @@ export default function VoiceReview({
   me,
   chats,
   blob,
+  initialTranscript,
+  initialPassage,
   onClose,
   exiting = false,
 }: {
   me: Me;
   chats: ChatSummary[];
   blob: Blob;
+  /** If provided, skip the Whisper fallback and use this transcript directly. */
+  initialTranscript?: string | null;
+  /** If provided, skip parse-passage and use this. */
+  initialPassage?: ParsedPassage | null;
   onClose: () => void;
   exiting?: boolean;
 }) {
+  const hasRealtime = typeof initialTranscript === "string";
   const [supabase] = useState(() => createClient());
-  const [transcript, setTranscript] = useState("");
-  const [transcribing, setTranscribing] = useState(false);
-  const [reference, setReference] = useState<string | null>(null);
-  const [passage, setPassage] = useState<ParsedPassage | null>(null);
+  const [transcript, setTranscript] = useState(() => {
+    const t = initialTranscript ?? "";
+    const ref = initialPassage?.reference ?? null;
+    return ref ? stripReferencePrefix(t, ref) : t;
+  });
+  const [transcribing, setTranscribing] = useState(!hasRealtime);
+  const [reference, setReference] = useState<string | null>(
+    initialPassage?.reference ?? null,
+  );
+  const [passage, setPassage] = useState<ParsedPassage | null>(
+    initialPassage ?? null,
+  );
   const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +139,7 @@ export default function VoiceReview({
   };
 
   useEffect(() => {
+    if (hasRealtime) return;
     let cancelled = false;
     (async () => {
       setTranscribing(true);
@@ -166,7 +182,7 @@ export default function VoiceReview({
     return () => {
       cancelled = true;
     };
-  }, [blob]);
+  }, [blob, hasRealtime]);
 
   function toggleChat(id: string) {
     setSelectedChatIds((prev) => {
