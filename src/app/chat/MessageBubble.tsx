@@ -16,6 +16,9 @@ export default function MessageBubble({ message, isMine, currentUserId }: Props)
   const [showReply, setShowReply] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressFiredRef = useRef(false);
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -65,6 +68,44 @@ export default function MessageBubble({ message, isMine, currentUserId }: Props)
     }
   };
 
+  const clearLongPress = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    pointerStartRef.current = null;
+  };
+
+  const onBubblePointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    longPressFiredRef.current = false;
+    pointerStartRef.current = { x: e.clientX, y: e.clientY };
+    clearLongPress();
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressFiredRef.current = true;
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        navigator.vibrate(15);
+      }
+      toggleHeart();
+    }, 200);
+  };
+
+  const onBubblePointerMove = (e: React.PointerEvent) => {
+    const start = pointerStartRef.current;
+    if (!start) return;
+    if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > 10) {
+      clearLongPress();
+    }
+  };
+
+  const onBubbleClickCapture = (e: React.MouseEvent) => {
+    if (longPressFiredRef.current) {
+      e.stopPropagation();
+      e.preventDefault();
+      longPressFiredRef.current = false;
+    }
+  };
+
   const sendReply = async () => {
     const body = replyText.trim();
     if (!body) return;
@@ -91,10 +132,29 @@ export default function MessageBubble({ message, isMine, currentUserId }: Props)
       ) : null}
 
       <div
-        className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${
+        onPointerDown={onBubblePointerDown}
+        onPointerMove={onBubblePointerMove}
+        onPointerUp={clearLongPress}
+        onPointerCancel={clearLongPress}
+        onPointerLeave={clearLongPress}
+        onClickCapture={onBubbleClickCapture}
+        onContextMenu={(e) => e.preventDefault()}
+        className={`relative max-w-[78%] select-none rounded-2xl px-4 py-2.5 ${
           isMine ? "bg-blue-500 text-white" : "bg-stone-200 text-stone-900"
-        }`}
+        } ${heartCount > 0 ? "mt-3" : ""}`}
       >
+        {heartCount > 0 ? (
+          <div
+            className={`pointer-events-none absolute -top-3 flex items-center gap-0.5 rounded-full bg-white px-1.5 py-0.5 text-[11px] shadow-md ring-1 ring-stone-200 ${
+              isMine ? "-left-2" : "-right-2"
+            }`}
+          >
+            <span className="text-red-500">❤</span>
+            {heartCount > 1 ? (
+              <span className="font-medium text-stone-600">{heartCount}</span>
+            ) : null}
+          </div>
+        ) : null}
         {body || reference ? (
           <div className="flex items-center gap-3">
             {hasAudio ? (
@@ -156,13 +216,6 @@ export default function MessageBubble({ message, isMine, currentUserId }: Props)
 
       <div className={`mt-1 flex items-center gap-3 px-2 text-xs ${isMine ? "flex-row-reverse" : ""}`}>
         <span className="text-stone-400">{time}</span>
-        <button
-          onClick={toggleHeart}
-          className={`active:scale-95 ${heart ? "text-red-500" : "text-stone-400"}`}
-          aria-label="React with heart"
-        >
-          ❤️ {heartCount > 0 ? heartCount : ""}
-        </button>
         <button
           onClick={() => setShowReply((v) => !v)}
           className="text-stone-400 active:text-stone-600"
