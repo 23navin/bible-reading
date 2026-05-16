@@ -145,11 +145,18 @@ export default function MessageBubble({ message, isMine, currentUserId }: Props)
       >
         {heartCount > 0 ? (
           <div
-            className={`pointer-events-none absolute -top-3 flex items-center gap-0.5 rounded-full bg-white px-1.5 py-0.5 text-[11px] shadow-md ring-1 ring-stone-200 ${
-              isMine ? "-left-2" : "-right-2"
-            }`}
+            className={`pointer-events-none absolute -top-3 flex h-6 items-center justify-center gap-0.5 rounded-full bg-white text-[11px] shadow-md ring-1 ring-stone-200 ${
+              heartCount > 1 ? "min-w-6 px-1.5" : "w-6"
+            } ${isMine ? "-left-2" : "-right-2"}`}
           >
-            <span className="text-red-500">❤</span>
+            <svg
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="h-3.5 w-3.5 text-rose-500"
+              aria-hidden
+            >
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+            </svg>
             {heartCount > 1 ? (
               <span className="font-medium text-stone-600">{heartCount}</span>
             ) : null}
