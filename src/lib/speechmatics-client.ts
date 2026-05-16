@@ -44,6 +44,9 @@ export class SpeechmaticsSession {
   private partialText = "";
   private started = false;
   private stopping = false;
+  private clientReady = false;
+  private clientStarted = false;
+  private pendingAudio: ArrayBuffer[] = [];
 
   constructor(private readonly callbacks: SpeechmaticsCallbacks = {}) {}
 
@@ -65,16 +68,17 @@ export class SpeechmaticsSession {
       : this.partialText;
   }
 
-  async start(stream: MediaStream, opts?: { token?: string }): Promise<void> {
+  /**
+   * Set up the AudioContext + worklet and start capturing PCM (buffered
+   * until the client is ready). Run this BEFORE starting a MediaRecorder
+   * on the same stream — on iOS, hooking an AudioContext into a getUserMedia
+   * stream briefly reconfigures the audio session for voice processing,
+   * which drops a few ms of samples. Doing it first keeps that disruption
+   * out of the recording.
+   */
+  async prepareAudio(stream: MediaStream): Promise<void> {
     if (this.started) throw new Error("Session already started");
     this.started = true;
-
-    let token = opts?.token;
-    if (!token) {
-      const tokenRes = await fetch("/api/speechmatics-token", { method: "POST" });
-      if (!tokenRes.ok) throw new Error("Failed to fetch Speechmatics token");
-      ({ token } = (await tokenRes.json()) as { token: string });
-    }
 
     const AudioCtx: typeof AudioContext =
       window.AudioContext ??
@@ -92,10 +96,52 @@ export class SpeechmaticsSession {
     } finally {
       URL.revokeObjectURL(workletUrl);
     }
+    if (this.stopping) return;
+
+    const source = audioContext.createMediaStreamSource(stream);
+    const node = new AudioWorkletNode(audioContext, "pcm-s16le-processor");
+    node.port.onmessage = (ev) => {
+      if (this.stopping) return;
+      const buf = ev.data as ArrayBuffer;
+      if (this.clientReady && this.client) {
+        try {
+          this.client.sendAudio(buf);
+        } catch (err) {
+          this.callbacks.onError?.(err);
+        }
+      } else {
+        this.pendingAudio.push(buf);
+      }
+    };
+    source.connect(node);
+    // AudioWorkletNode must have a destination for `process` to run in some
+    // browsers — connect to a muted gain to keep audio silent.
+    const muted = audioContext.createGain();
+    muted.gain.value = 0;
+    node.connect(muted).connect(audioContext.destination);
+    this.sourceNode = source;
+    this.workletNode = node;
+  }
+
+  /**
+   * Open the WebSocket, start recognition, and flush any PCM captured
+   * during the handshake. Safe to fire-and-forget; errors go to onError.
+   */
+  async connectClient(opts?: { token?: string }): Promise<void> {
+    const audioContext = this.audioContext;
+    if (!audioContext) throw new Error("prepareAudio() must run first");
+    if (this.stopping) return;
+
+    let token = opts?.token;
+    if (!token) {
+      const tokenRes = await fetch("/api/speechmatics-token", { method: "POST" });
+      if (!tokenRes.ok) throw new Error("Failed to fetch Speechmatics token");
+      ({ token } = (await tokenRes.json()) as { token: string });
+    }
+    if (this.stopping) return;
 
     const client = new RealtimeClient();
     this.client = client;
-
     client.addEventListener("receiveMessage", (ev) => {
       this.handleMessage(ev.data);
     });
@@ -113,31 +159,33 @@ export class SpeechmaticsSession {
         sample_rate: audioContext.sampleRate,
       },
     });
+    this.clientStarted = true;
+    if (this.stopping) return;
 
-    const source = audioContext.createMediaStreamSource(stream);
-    const node = new AudioWorkletNode(audioContext, "pcm-s16le-processor");
-    node.port.onmessage = (ev) => {
-      if (this.stopping || !this.client) return;
+    this.clientReady = true;
+    while (this.pendingAudio.length > 0) {
+      if (this.stopping) break;
+      const buf = this.pendingAudio.shift();
+      if (!buf) break;
       try {
-        this.client.sendAudio(ev.data as ArrayBuffer);
+        client.sendAudio(buf);
       } catch (err) {
         this.callbacks.onError?.(err);
+        break;
       }
-    };
-    source.connect(node);
-    // AudioWorkletNode must have a destination for `process` to run in some
-    // browsers — connect to a muted gain to keep audio silent.
-    const muted = audioContext.createGain();
-    muted.gain.value = 0;
-    node.connect(muted).connect(audioContext.destination);
+    }
+  }
 
-    this.sourceNode = source;
-    this.workletNode = node;
+  /** Convenience: prepare audio and connect the client end-to-end. */
+  async start(stream: MediaStream, opts?: { token?: string }): Promise<void> {
+    await this.prepareAudio(stream);
+    await this.connectClient(opts);
   }
 
   /** Send EndOfStream and wait for EndOfTranscript. Returns the final transcript. */
   async stop(): Promise<string> {
     this.stopping = true;
+    this.pendingAudio = [];
     try {
       try {
         this.workletNode?.disconnect();
@@ -148,14 +196,16 @@ export class SpeechmaticsSession {
       this.workletNode = null;
       this.sourceNode = null;
 
-      if (this.client) {
+      // Only call stopRecognition if the client actually finished its
+      // handshake — calling it mid-`start()` would reject.
+      if (this.client && this.clientStarted) {
         try {
           await this.client.stopRecognition();
         } catch (err) {
           this.callbacks.onError?.(err);
         }
-        this.client = null;
       }
+      this.client = null;
     } finally {
       if (this.audioContext) {
         this.audioContext.close().catch(() => {});
@@ -168,6 +218,7 @@ export class SpeechmaticsSession {
   /** Abort without waiting for EndOfTranscript. */
   abort(): void {
     this.stopping = true;
+    this.pendingAudio = [];
     try {
       this.workletNode?.disconnect();
       this.sourceNode?.disconnect();

@@ -156,83 +156,95 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
       setMode("review");
     };
 
-    // Let the morph + keyboard-collapse transition (300ms) finish before
-    // touching getUserMedia / MediaRecorder. On iOS these block the main
-    // thread enough to drop frames mid-animation.
-    const initTimer = setTimeout(() => {
-      void (async () => {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          if (aborted) {
-            stream.getTracks().forEach((t) => t.stop());
-            return;
-          }
-          const rec = new MediaRecorder(stream);
-          activeRec = rec;
-          chunksRef.current = [];
-          finalTextRef.current = "";
-          parsedRef.current = null;
-          realtimeFailedRef.current = false;
-          rec.ondataavailable = (e) => {
-            if (e.data.size > 0) chunksRef.current.push(e.data);
-          };
-          rec.onstop = () => {
-            stream.getTracks().forEach((t) => t.stop());
-            if (aborted) return;
-            const b = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
-            void finalizeAndOpenReview(b);
-          };
-
-          // Bring Speechmatics up BEFORE the recorder so the live transcript
-          // captures the first words the user speaks. Otherwise the recorder
-          // captures audio for the ~hundreds of ms it takes the websocket
-          // handshake to complete, but those samples never reach the live
-          // transcription.
-          const session = new SpeechmaticsSession({
-            onFinal: (full) => {
-              finalTextRef.current = full;
-              scheduleParse();
-            },
-            onError: (err) => {
-              console.error("speechmatics error", err);
-              realtimeFailedRef.current = true;
-            },
-          });
-          try {
-            const token = await tokenPromise;
-            await session.start(stream, token ? { token } : undefined);
-            if (aborted) {
-              session.abort();
-              stream.getTracks().forEach((t) => t.stop());
-              return;
-            }
-            sessionRef.current = session;
-          } catch (err) {
-            console.error("speechmatics start failed", err);
-            realtimeFailedRef.current = true;
-          }
-
-          if (aborted) {
-            stream.getTracks().forEach((t) => t.stop());
-            return;
-          }
-          rec.start();
-          startedAtRef.current = Date.now();
-          setElapsedMs(0);
-          recorderRef.current = rec;
-          setRecordingReady(true);
-        } catch {
-          if (!aborted) {
-            setMicError("Microphone access denied.");
-            setMode("idle");
-          }
+    // Bring up the Speechmatics audio path BEFORE starting MediaRecorder.
+    // On iOS, attaching an AudioContext to a getUserMedia stream briefly
+    // reconfigures the audio session for voice processing — that reroute
+    // drops a few ms of samples. If MediaRecorder is already recording when
+    // it happens, those dropped samples show up as a stitched/skipped
+    // syllable at the start of the clip. Doing prepareAudio first keeps
+    // the disruption out of the recording entirely.
+    void (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (aborted) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
         }
-      })();
-    }, 320);
+        const rec = new MediaRecorder(stream);
+        activeRec = rec;
+        chunksRef.current = [];
+        finalTextRef.current = "";
+        parsedRef.current = null;
+        realtimeFailedRef.current = false;
+        rec.ondataavailable = (e) => {
+          if (e.data.size > 0) chunksRef.current.push(e.data);
+        };
+        rec.onstop = () => {
+          stream.getTracks().forEach((t) => t.stop());
+          if (aborted) return;
+          const b = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
+          void finalizeAndOpenReview(b);
+        };
+
+        const session = new SpeechmaticsSession({
+          onFinal: (full) => {
+            finalTextRef.current = full;
+            scheduleParse();
+          },
+          onError: (err) => {
+            console.error("speechmatics error", err);
+            realtimeFailedRef.current = true;
+          },
+        });
+        // Track immediately so a stop/cancel mid-handshake can abort it.
+        sessionRef.current = session;
+
+        try {
+          await session.prepareAudio(stream);
+        } catch (err) {
+          console.error("speechmatics prepareAudio failed", err);
+          realtimeFailedRef.current = true;
+          session.abort();
+          if (sessionRef.current === session) sessionRef.current = null;
+        }
+        if (aborted) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
+        rec.start();
+        startedAtRef.current = Date.now();
+        setElapsedMs(0);
+        recorderRef.current = rec;
+        setRecordingReady(true);
+
+        if (!realtimeFailedRef.current) {
+          void (async () => {
+            try {
+              const token = await tokenPromise;
+              await session.connectClient(token ? { token } : undefined);
+              if (aborted) {
+                session.abort();
+                if (sessionRef.current === session) sessionRef.current = null;
+              }
+            } catch (err) {
+              console.error("speechmatics connectClient failed", err);
+              realtimeFailedRef.current = true;
+              session.abort();
+              if (sessionRef.current === session) sessionRef.current = null;
+            }
+          })();
+        }
+      } catch {
+        if (!aborted) {
+          setMicError("Microphone access denied.");
+          setMode("idle");
+        }
+      }
+    })();
 
     return () => {
       aborted = true;
-      clearTimeout(initTimer);
       if (recorderRef.current === activeRec) recorderRef.current = null;
       if (activeRec && activeRec.state !== "inactive") activeRec.stop();
       if (sessionRef.current) {
