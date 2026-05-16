@@ -23,6 +23,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
   const [blob, setBlob] = useState<Blob | null>(null);
   const [realtimeTranscript, setRealtimeTranscript] = useState<string | null>(null);
   const [realtimePassage, setRealtimePassage] = useState<ParsedPassage | null>(null);
+  const [liveTranscribing, setLiveTranscribing] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
   const [exiting, setExiting] = useState(false);
@@ -44,8 +45,12 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
     finalTextRef.current = "";
     parsedRef.current = null;
     realtimeFailedRef.current = false;
-    setRealtimeTranscript(null);
+    // Empty string (vs. null) signals to VoiceReview that realtime is the
+    // source of truth; we'll fall back to null only if the session fails
+    // before stop.
+    setRealtimeTranscript("");
     setRealtimePassage(null);
+    setLiveTranscribing(false);
     setRecordingReady(false);
     setStopping(false);
     setMode("recording");
@@ -59,6 +64,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
         setBlob(null);
         setRealtimeTranscript(null);
         setRealtimePassage(null);
+        setLiveTranscribing(false);
         setExiting(false);
       }, 200);
     } else {
@@ -66,6 +72,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
       setBlob(null);
       setRealtimeTranscript(null);
       setRealtimePassage(null);
+      setLiveTranscribing(false);
     }
   };
 
@@ -103,6 +110,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
         const p = (await res.json()) as ParsedPassage;
         if (parseAbortRef.current === ac && p.reference) {
           parsedRef.current = p;
+          setRealtimePassage(p);
         }
       } catch {
         // Aborted or network error — leave for a later attempt or fallback.
@@ -118,42 +126,44 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
     };
 
     const finalizeAndOpenReview = async (recordedBlob: Blob) => {
-      setBlob(recordedBlob);
-
+      // Null the session ref before any setMode so the mode-change cleanup
+      // below doesn't abort the live session out from under us.
       const session = sessionRef.current;
       sessionRef.current = null;
-      if (session && !realtimeFailedRef.current) {
+
+      if (realtimeFailedRef.current) {
+        // Realtime never came up. Fall back to Whisper: hand the blob to
+        // VoiceReview, which will transcribe it itself.
+        session?.abort();
+        setRealtimeTranscript(null);
+        setRealtimePassage(null);
+        setBlob(recordedBlob);
+        setMode("review");
+        return;
+      }
+
+      // Realtime is alive. Move to review immediately so the user sees the
+      // streaming transcript fill in, and finish stop+parse in the background.
+      setBlob(recordedBlob);
+      setLiveTranscribing(true);
+      setMode("review");
+
+      if (session) {
         try {
           const finalText = await session.stop();
           if (finalText) finalTextRef.current = finalText;
+          setRealtimeTranscript(finalTextRef.current);
         } catch (err) {
           console.error("speechmatics stop failed", err);
-          realtimeFailedRef.current = true;
         }
-      } else if (session) {
-        session.abort();
       }
 
-      if (parseTimerRef.current) {
-        clearTimeout(parseTimerRef.current);
-        parseTimerRef.current = null;
-      }
-      if (
-        !realtimeFailedRef.current &&
-        finalTextRef.current &&
-        !parsedRef.current?.reference
-      ) {
+      if (finalTextRef.current && !parsedRef.current?.reference) {
         await runParse();
       }
-
-      if (!realtimeFailedRef.current && finalTextRef.current) {
-        setRealtimeTranscript(finalTextRef.current);
-        setRealtimePassage(parsedRef.current);
-      } else {
-        setRealtimeTranscript(null);
-        setRealtimePassage(null);
-      }
-      setMode("review");
+      setRealtimePassage(parsedRef.current);
+      // Flip last — VoiceReview stops syncing from props once this is false.
+      setLiveTranscribing(false);
     };
 
     // Bring up the Speechmatics audio path BEFORE starting MediaRecorder.
@@ -187,8 +197,16 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
         };
 
         const session = new SpeechmaticsSession({
+          onPartial: (full) => {
+            // Partials only fire during recording (Speechmatics stops sending
+            // them after StopRecognition). Pushing them into state lets a
+            // post-stop view show the trailing partial without a stutter
+            // while the final segments catch up.
+            setRealtimeTranscript(full);
+          },
           onFinal: (full) => {
             finalTextRef.current = full;
+            setRealtimeTranscript(full);
             scheduleParse();
           },
           onError: (err) => {
@@ -415,6 +433,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
           blob={blob}
           initialTranscript={realtimeTranscript}
           initialPassage={realtimePassage}
+          liveTranscribing={liveTranscribing}
           onClose={closeOverlay}
           exiting={exiting}
         />

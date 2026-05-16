@@ -27,6 +27,7 @@ export default function VoiceReview({
   blob,
   initialTranscript,
   initialPassage,
+  liveTranscribing = false,
   onClose,
   exiting = false,
 }: {
@@ -37,6 +38,8 @@ export default function VoiceReview({
   initialTranscript?: string | null;
   /** If provided, skip parse-passage and use this. */
   initialPassage?: ParsedPassage | null;
+  /** True while the realtime session is still streaming finals after stop. */
+  liveTranscribing?: boolean;
   onClose: () => void;
   exiting?: boolean;
 }) {
@@ -54,6 +57,18 @@ export default function VoiceReview({
   const [passage, setPassage] = useState<ParsedPassage | null>(
     initialPassage ?? null,
   );
+
+  // While the parent is still streaming the realtime transcript in,
+  // mirror it into our editable state. Once liveTranscribing flips false,
+  // we stop overwriting and the user can edit freely.
+  useEffect(() => {
+    if (!liveTranscribing) return;
+    const t = initialTranscript ?? "";
+    const ref = initialPassage?.reference ?? null;
+    setTranscript(ref ? stripReferencePrefix(t, ref) : t);
+    setReference(ref);
+    setPassage(initialPassage ?? null);
+  }, [liveTranscribing, initialTranscript, initialPassage]);
   const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -291,6 +306,7 @@ export default function VoiceReview({
                 setReference(e.target.value);
                 setPassage(null);
               }}
+              readOnly={liveTranscribing}
               placeholder="Passage Reference"
               className="min-w-0 flex-1 bg-transparent text-left text-sm font-semibold text-zinc-100 placeholder:text-zinc-500 outline-none"
             />
@@ -301,7 +317,8 @@ export default function VoiceReview({
             <textarea
               value={transcript}
               onChange={(e) => setTranscript(e.target.value)}
-              placeholder="Your thoughts..."
+              readOnly={liveTranscribing}
+              placeholder={liveTranscribing ? "Transcribing…" : "Your thoughts..."}
               rows={4}
               className="mt-2 w-full resize-none rounded-xl bg-transparent text-[15px] text-zinc-100 placeholder:text-zinc-500 outline-none"
             />
@@ -316,10 +333,14 @@ export default function VoiceReview({
         <div className="mt-auto flex gap-2 pt-2">
           <button
             onClick={send}
-            disabled={sending || transcribing}
+            disabled={sending || transcribing || liveTranscribing}
             className="flex h-20 w-full items-center justify-center rounded-md bg-zinc-300 font-semibold text-zinc-800 active:bg-blue-500/10 disabled:opacity-50"
           >
-            {sending ? "Logging…" : transcribing ? "Transcribing…" : "Log Reading"}
+            {sending
+              ? "Logging…"
+              : transcribing || liveTranscribing
+                ? "Transcribing…"
+                : "Log Reading"}
           </button>
         </div>
       </div>
