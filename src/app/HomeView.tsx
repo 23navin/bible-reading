@@ -93,7 +93,10 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
       .catch(() => undefined);
 
     const runParse = async () => {
-      if (parsedRef.current?.reference) return;
+      // Skip if we already have a fully-specified reference (book + chapter
+      // + verse range). Partial hits (book-only, chapter-only) must remain
+      // re-parsable as the transcript grows.
+      if (passageSpecificity(parsedRef.current) >= 4) return;
       const text = finalTextRef.current.trim();
       if (!text) return;
       parseAbortRef.current?.abort();
@@ -108,10 +111,13 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
         });
         if (!res.ok) return;
         const p = (await res.json()) as ParsedPassage;
-        if (parseAbortRef.current === ac && p.reference) {
-          parsedRef.current = p;
-          setRealtimePassage(p);
-        }
+        if (parseAbortRef.current !== ac) return;
+        if (!p.reference) return;
+        // Guard against a re-parse that returns less detail than what we
+        // already have — Haiku occasionally regresses on longer transcripts.
+        if (passageSpecificity(p) < passageSpecificity(parsedRef.current)) return;
+        parsedRef.current = p;
+        setRealtimePassage(p);
       } catch {
         // Aborted or network error — leave for a later attempt or fallback.
       }
@@ -154,15 +160,25 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
           if (finalText) finalTextRef.current = finalText;
           setRealtimeTranscript(finalTextRef.current);
         } catch (err) {
-          console.error("speechmatics stop failed", err);
+          console.warn("speechmatics stop failed", err);
         }
       }
 
-      if (finalTextRef.current && !parsedRef.current?.reference) {
+      // Speechmatics emits trailing finals while session.stop() awaits
+      // EndOfTranscript. Each one schedules a debounced parse — if any of
+      // those timers fire after this point they'll abort the explicit
+      // runParse below and leave parsedRef null. Drain them now.
+      if (parseTimerRef.current) {
+        clearTimeout(parseTimerRef.current);
+        parseTimerRef.current = null;
+      }
+      parseAbortRef.current?.abort();
+      parseAbortRef.current = null;
+
+      if (finalTextRef.current) {
         await runParse();
       }
       setRealtimePassage(parsedRef.current);
-      // Flip last — VoiceReview stops syncing from props once this is false.
       setLiveTranscribing(false);
     };
 
@@ -210,7 +226,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
             scheduleParse();
           },
           onError: (err) => {
-            console.error("speechmatics error", err);
+            console.warn("speechmatics error", err);
             realtimeFailedRef.current = true;
           },
         });
@@ -220,7 +236,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
         try {
           await session.prepareAudio(stream);
         } catch (err) {
-          console.error("speechmatics prepareAudio failed", err);
+          console.warn("speechmatics prepareAudio failed", err);
           realtimeFailedRef.current = true;
           session.abort();
           if (sessionRef.current === session) sessionRef.current = null;
@@ -246,7 +262,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
                 if (sessionRef.current === session) sessionRef.current = null;
               }
             } catch (err) {
-              console.error("speechmatics connectClient failed", err);
+              console.warn("speechmatics connectClient failed", err);
               realtimeFailedRef.current = true;
               session.abort();
               if (sessionRef.current === session) sessionRef.current = null;
@@ -472,6 +488,15 @@ function KeyboardIcon({ className }: { className?: string }) {
       <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14.5h10" />
     </svg>
   );
+}
+
+function passageSpecificity(p: ParsedPassage | null): number {
+  if (!p?.reference) return 0;
+  if (p.verse_end != null) return 4;
+  if (p.verse_start != null) return 3;
+  if (p.chapter != null) return 2;
+  if (p.book != null) return 1;
+  return 0;
 }
 
 function formatElapsed(ms: number): string {

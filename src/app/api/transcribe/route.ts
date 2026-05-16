@@ -11,10 +11,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
 
-  const result = await openai.audio.transcriptions.create({
-    file,
-    model: "whisper-1",
-  });
-
-  return NextResponse.json({ text: result.text });
+  try {
+    const result = await openai.audio.transcriptions.create({
+      file,
+      model: "whisper-1",
+    });
+    return NextResponse.json({ text: result.text });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    console.warn("transcribe failed", detail);
+    return NextResponse.json(
+      { error: "transcribe failed", detail },
+      { status: 502 },
+    );
+  }
 }

@@ -57,18 +57,26 @@ export default function VoiceReview({
   const [passage, setPassage] = useState<ParsedPassage | null>(
     initialPassage ?? null,
   );
+  const userEditedTranscriptRef = useRef(false);
+  const userEditedReferenceRef = useRef(false);
 
-  // While the parent is still streaming the realtime transcript in,
-  // mirror it into our editable state. Once liveTranscribing flips false,
-  // we stop overwriting and the user can edit freely.
+  // Mirror realtime props into local state until the user edits the field.
+  // We can't gate this on `liveTranscribing` — the parent often batches the
+  // final parse update with `setLiveTranscribing(false)`, so by the time
+  // this effect runs both have changed and a guard on liveTranscribing would
+  // drop the parse result.
   useEffect(() => {
-    if (!liveTranscribing) return;
+    if (!hasRealtime) return;
     const t = initialTranscript ?? "";
     const ref = initialPassage?.reference ?? null;
-    setTranscript(ref ? stripReferencePrefix(t, ref) : t);
-    setReference(ref);
-    setPassage(initialPassage ?? null);
-  }, [liveTranscribing, initialTranscript, initialPassage]);
+    if (!userEditedTranscriptRef.current) {
+      setTranscript(ref ? stripReferencePrefix(t, ref) : t);
+    }
+    if (!userEditedReferenceRef.current) {
+      setReference(ref);
+      setPassage(initialPassage ?? null);
+    }
+  }, [hasRealtime, initialTranscript, initialPassage]);
   const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -160,12 +168,26 @@ export default function VoiceReview({
       setTranscribing(true);
       try {
         const fd = new FormData();
+        // iOS Safari's MediaRecorder produces audio/mp4; Whisper uses the
+        // filename extension to detect format, so the name has to match the
+        // codec or the request fails.
+        const ext = blob.type.includes("mp4") ? "m4a" : "webm";
         fd.append(
           "file",
-          new File([blob], "memo.webm", { type: blob.type || "audio/webm" }),
+          new File([blob], `memo.${ext}`, { type: blob.type || "audio/webm" }),
         );
-        const res = await fetch("/api/transcribe", { method: "POST", body: fd });
-        if (!res.ok) throw new Error("transcribe failed");
+        let res: Response | null = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          if (cancelled) return;
+          try {
+            res = await fetch("/api/transcribe", { method: "POST", body: fd });
+            if (res.ok) break;
+          } catch {
+            res = null;
+          }
+          if (attempt === 0) await new Promise((r) => setTimeout(r, 500));
+        }
+        if (!res || !res.ok) throw new Error("transcribe failed");
         const { text } = (await res.json()) as { text: string };
         if (cancelled) return;
         setTranscript(text);
@@ -303,6 +325,7 @@ export default function VoiceReview({
               type="text"
               value={reference ?? ""}
               onChange={(e) => {
+                userEditedReferenceRef.current = true;
                 setReference(e.target.value);
                 setPassage(null);
               }}
@@ -316,7 +339,10 @@ export default function VoiceReview({
           ) : (
             <textarea
               value={transcript}
-              onChange={(e) => setTranscript(e.target.value)}
+              onChange={(e) => {
+                userEditedTranscriptRef.current = true;
+                setTranscript(e.target.value);
+              }}
               readOnly={liveTranscribing}
               placeholder={liveTranscribing ? "Transcribing…" : "Your thoughts..."}
               rows={4}

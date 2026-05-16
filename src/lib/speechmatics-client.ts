@@ -7,6 +7,50 @@ import {
   type RealtimeServerMessage,
 } from "@speechmatics/real-time-client";
 
+// Bias the recognizer toward canonical Bible book names. Plain strings raise
+// the prior on those tokens; sounds_like entries cover the names that are
+// routinely misheard (Habakkuk, Zephaniah, etc.) and the spoken forms of the
+// ordinal-prefixed books, which users almost never say as "one corinthians".
+// Speechmatics docs note a startup-latency penalty proportional to list size,
+// so we keep sounds_like only on books that actually fail in practice.
+const BIBLE_BOOK_VOCAB: (string | { content: string; sounds_like?: string[] })[] = [
+  "Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy",
+  "Joshua", "Judges", "Ruth",
+  { content: "1 Samuel", sounds_like: ["first samuel", "one samuel"] },
+  { content: "2 Samuel", sounds_like: ["second samuel", "two samuel"] },
+  { content: "1 Kings", sounds_like: ["first kings", "one kings"] },
+  { content: "2 Kings", sounds_like: ["second kings", "two kings"] },
+  { content: "1 Chronicles", sounds_like: ["first chronicles", "one chronicles"] },
+  { content: "2 Chronicles", sounds_like: ["second chronicles", "two chronicles"] },
+  "Ezra", "Nehemiah", "Esther", "Job", "Psalms", "Psalm", "Proverbs",
+  "Ecclesiastes", "Song of Solomon", "Isaiah", "Jeremiah", "Lamentations",
+  "Ezekiel", "Daniel", "Hosea", "Joel", "Amos",
+  { content: "Obadiah", sounds_like: ["oh buddy ya", "obediah"] },
+  "Jonah", "Micah",
+  { content: "Nahum", sounds_like: ["nay hum", "nahem"] },
+  { content: "Habakkuk", sounds_like: ["habakuk", "hubbakuk", "ha back uk"] },
+  { content: "Zephaniah", sounds_like: ["zephania", "zeffaniah"] },
+  { content: "Haggai", sounds_like: ["hag eye", "hagai"] },
+  { content: "Zechariah", sounds_like: ["zacariah", "zekariah"] },
+  "Malachi", "Matthew", "Mark", "Luke", "John", "Acts", "Romans",
+  { content: "1 Corinthians", sounds_like: ["first corinthians", "one corinthians"] },
+  { content: "2 Corinthians", sounds_like: ["second corinthians", "two corinthians"] },
+  "Galatians", "Ephesians", "Philippians", "Colossians",
+  { content: "1 Thessalonians", sounds_like: ["first thessalonians", "one thessalonians"] },
+  { content: "2 Thessalonians", sounds_like: ["second thessalonians", "two thessalonians"] },
+  { content: "1 Timothy", sounds_like: ["first timothy", "one timothy"] },
+  { content: "2 Timothy", sounds_like: ["second timothy", "two timothy"] },
+  "Titus",
+  { content: "Philemon", sounds_like: ["filemon", "fillymon"] },
+  "Hebrews", "James",
+  { content: "1 Peter", sounds_like: ["first peter", "one peter"] },
+  { content: "2 Peter", sounds_like: ["second peter", "two peter"] },
+  { content: "1 John", sounds_like: ["first john", "one john"] },
+  { content: "2 John", sounds_like: ["second john", "two john"] },
+  { content: "3 John", sounds_like: ["third john", "three john"] },
+  "Jude", "Revelation",
+];
+
 // AudioWorklet that emits Int16 PCM from the input stream. Loaded as a Blob
 // URL so we don't need a static asset under /public.
 const PCM_WORKLET_SOURCE = `
@@ -70,7 +114,7 @@ export class SpeechmaticsSession {
 
   /**
    * Set up the AudioContext + worklet and start capturing PCM (buffered
-   * until the client is ready). Run this BEFORE starting a MediaRecorder
+   * until the client is ready). Run BEFORE starting a MediaRecorder
    * on the same stream — on iOS, hooking an AudioContext into a getUserMedia
    * stream briefly reconfigures the audio session for voice processing,
    * which drops a few ms of samples. Doing it first keeps that disruption
@@ -134,9 +178,25 @@ export class SpeechmaticsSession {
 
     let token = opts?.token;
     if (!token) {
-      const tokenRes = await fetch("/api/speechmatics-token", { method: "POST" });
-      if (!tokenRes.ok) throw new Error("Failed to fetch Speechmatics token");
-      ({ token } = (await tokenRes.json()) as { token: string });
+      // One retry — the upstream token endpoint is the most common source of
+      // intermittent network failures (Safari "Load failed") and a single
+      // backoff usually recovers without surfacing anything to the user.
+      let lastErr: unknown = new Error("Failed to fetch Speechmatics token");
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (this.stopping) return;
+        try {
+          const tokenRes = await fetch("/api/speechmatics-token", { method: "POST" });
+          if (!tokenRes.ok) throw new Error("Failed to fetch Speechmatics token");
+          const body = (await tokenRes.json()) as { token: string };
+          token = body.token;
+          lastErr = null;
+          break;
+        } catch (err) {
+          lastErr = err;
+          if (attempt === 0) await new Promise((r) => setTimeout(r, 250));
+        }
+      }
+      if (!token) throw lastErr ?? new Error("Failed to fetch Speechmatics token");
     }
     if (this.stopping) return;
 
@@ -151,7 +211,16 @@ export class SpeechmaticsSession {
         language: "en",
         enable_partials: true,
         operating_point: "enhanced",
-        max_delay: 1,
+        max_delay: 4,
+        additional_vocab: BIBLE_BOOK_VOCAB,
+        "transcript_filtering_config": {
+          "remove_disfluencies": true
+        },
+        "punctuation_overrides": {
+            "permitted_marks": ["all"],
+            "sensitivity": 0.8
+        }
+
       },
       audio_format: {
         type: "raw",

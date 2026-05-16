@@ -11,14 +11,26 @@ export async function POST() {
     );
   }
 
-  const res = await fetch(MP_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ ttl: 300 }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(MP_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ttl: 300 }),
+      // Without this the route can hang indefinitely when mp.speechmatics.com
+      // is slow, which clients see as "Load failed" after their own timeout.
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      { error: "Failed to mint Speechmatics token", detail },
+      { status: 502 },
+    );
+  }
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
