@@ -2,7 +2,9 @@
 
 import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase";
+import { SpeechmaticsSession } from "@/lib/speechmatics-client";
 import type { Message } from "@/lib/types";
+import { applyReferenceReplacement, type ParsedPassage } from "../home-shared";
 
 // Assumes a public Supabase Storage bucket named "voice-memos".
 const VOICE_BUCKET = "audio-memos";
@@ -12,14 +14,6 @@ type Props = {
   currentUserId: string;
   onOptimistic: (m: Message) => void;
   onReconcile: (optimisticId: string, realId: string) => void;
-};
-
-type ParsedPassage = {
-  book: string | null;
-  chapter: number | null;
-  verse_start: number | null;
-  verse_end: number | null;
-  reference: string | null;
 };
 
 async function parsePassage(text: string): Promise<ParsedPassage> {
@@ -32,7 +26,7 @@ async function parsePassage(text: string): Promise<ParsedPassage> {
     if (!res.ok) throw new Error("parse failed");
     return await res.json();
   } catch {
-    return { book: null, chapter: null, verse_start: null, verse_end: null, reference: null };
+    return { book: null, chapter: null, verse_start: null, verse_end: null, reference: null, matched_text: null };
   }
 }
 
@@ -52,12 +46,20 @@ export default function Composer({ chatId, currentUserId, onOptimistic, onReconc
   const [busy, setBusy] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const sessionRef = useRef<SpeechmaticsSession | null>(null);
+  const finalTextRef = useRef("");
+  const parsedRef = useRef<ParsedPassage | null>(null);
+  const parseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const realtimeFailedRef = useRef(false);
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const rec = new MediaRecorder(stream);
       chunksRef.current = [];
+      finalTextRef.current = "";
+      parsedRef.current = null;
+      realtimeFailedRef.current = false;
       rec.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
@@ -69,6 +71,31 @@ export default function Composer({ chatId, currentUserId, onOptimistic, onReconc
       rec.start();
       recorderRef.current = rec;
       setRecording(true);
+
+      const session = new SpeechmaticsSession({
+        onFinal: (full) => {
+          finalTextRef.current = full;
+          if (parsedRef.current?.reference) return;
+          if (parseTimerRef.current) clearTimeout(parseTimerRef.current);
+          parseTimerRef.current = setTimeout(async () => {
+            const t = finalTextRef.current.trim();
+            if (!t || parsedRef.current?.reference) return;
+            const p = await parsePassage(t);
+            if (p.reference) parsedRef.current = p;
+          }, 500);
+        },
+        onError: (err) => {
+          console.error("speechmatics error", err);
+          realtimeFailedRef.current = true;
+        },
+      });
+      try {
+        await session.start(stream);
+        sessionRef.current = session;
+      } catch (err) {
+        console.error("speechmatics start failed", err);
+        realtimeFailedRef.current = true;
+      }
     } catch (err) {
       console.error(err);
       alert("Microphone access denied.");
@@ -91,8 +118,34 @@ export default function Composer({ chatId, currentUserId, onOptimistic, onReconc
         .upload(path, blob, { contentType: blob.type, upsert: false });
       if (upErr) throw upErr;
 
-      const transcript = await transcribe(blob).catch(() => "");
-      const passage = transcript ? await parsePassage(transcript) : null;
+      const session = sessionRef.current;
+      sessionRef.current = null;
+      if (session && !realtimeFailedRef.current) {
+        try {
+          const finalText = await session.stop();
+          if (finalText) finalTextRef.current = finalText;
+        } catch (err) {
+          console.error("speechmatics stop failed", err);
+          realtimeFailedRef.current = true;
+        }
+      } else if (session) {
+        session.abort();
+      }
+      if (parseTimerRef.current) {
+        clearTimeout(parseTimerRef.current);
+        parseTimerRef.current = null;
+      }
+
+      let transcript: string;
+      let passage: ParsedPassage | null;
+      if (!realtimeFailedRef.current && finalTextRef.current) {
+        transcript = finalTextRef.current;
+        passage = parsedRef.current ?? (await parsePassage(transcript));
+      } else {
+        transcript = await transcribe(blob).catch(() => "");
+        passage = transcript ? await parsePassage(transcript) : null;
+      }
+      transcript = applyReferenceReplacement(transcript, passage);
 
       await insertMessage({
         note: null,
@@ -116,7 +169,7 @@ export default function Composer({ chatId, currentUserId, onOptimistic, onReconc
     try {
       const passage = await parsePassage(value);
       await insertMessage({
-        note: value,
+        note: applyReferenceReplacement(value, passage),
         voice_path: null,
         transcript: null,
         passage,

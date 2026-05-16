@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase";
 import {
   DiscardButton,
   ShareTargets,
+  applyReferenceReplacement,
   type ChatSummary,
   type Me,
   type ParsedPassage,
@@ -12,33 +13,60 @@ import {
 
 const VOICE_BUCKET = "audio-memos";
 
-function stripReferencePrefix(text: string, ref: string): string {
-  if (!text || !ref) return text;
-  const trimmed = text.trimStart();
-  if (!trimmed.toLowerCase().startsWith(ref.toLowerCase())) return text;
-  const rest = trimmed.slice(ref.length).replace(/^[\s,;:.\-—–]+/, "");
-  if (!rest) return "";
-  return rest.charAt(0).toUpperCase() + rest.slice(1);
-}
-
 export default function VoiceReview({
   me,
   chats,
   blob,
+  initialTranscript,
+  initialPassage,
+  liveTranscribing = false,
   onClose,
   exiting = false,
 }: {
   me: Me;
   chats: ChatSummary[];
   blob: Blob;
+  /** If provided, skip the Whisper fallback and use this transcript directly. */
+  initialTranscript?: string | null;
+  /** If provided, skip parse-passage and use this. */
+  initialPassage?: ParsedPassage | null;
+  /** True while the realtime session is still streaming finals after stop. */
+  liveTranscribing?: boolean;
   onClose: () => void;
   exiting?: boolean;
 }) {
+  const hasRealtime = typeof initialTranscript === "string";
   const [supabase] = useState(() => createClient());
-  const [transcript, setTranscript] = useState("");
-  const [transcribing, setTranscribing] = useState(false);
-  const [reference, setReference] = useState<string | null>(null);
-  const [passage, setPassage] = useState<ParsedPassage | null>(null);
+  const [transcript, setTranscript] = useState(() =>
+    applyReferenceReplacement(initialTranscript ?? "", initialPassage ?? null),
+  );
+  const [transcribing, setTranscribing] = useState(!hasRealtime);
+  const [reference, setReference] = useState<string | null>(
+    initialPassage?.reference ?? null,
+  );
+  const [passage, setPassage] = useState<ParsedPassage | null>(
+    initialPassage ?? null,
+  );
+  const userEditedTranscriptRef = useRef(false);
+  const userEditedReferenceRef = useRef(false);
+
+  // Mirror realtime props into local state until the user edits the field.
+  // We can't gate this on `liveTranscribing` — the parent often batches the
+  // final parse update with `setLiveTranscribing(false)`, so by the time
+  // this effect runs both have changed and a guard on liveTranscribing would
+  // drop the parse result.
+  useEffect(() => {
+    if (!hasRealtime) return;
+    const t = initialTranscript ?? "";
+    const ref = initialPassage?.reference ?? null;
+    if (!userEditedTranscriptRef.current) {
+      setTranscript(applyReferenceReplacement(t, initialPassage ?? null));
+    }
+    if (!userEditedReferenceRef.current) {
+      setReference(ref);
+      setPassage(initialPassage ?? null);
+    }
+  }, [hasRealtime, initialTranscript, initialPassage]);
   const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,17 +152,32 @@ export default function VoiceReview({
   };
 
   useEffect(() => {
+    if (hasRealtime) return;
     let cancelled = false;
     (async () => {
       setTranscribing(true);
       try {
         const fd = new FormData();
+        // iOS Safari's MediaRecorder produces audio/mp4; Whisper uses the
+        // filename extension to detect format, so the name has to match the
+        // codec or the request fails.
+        const ext = blob.type.includes("mp4") ? "m4a" : "webm";
         fd.append(
           "file",
-          new File([blob], "memo.webm", { type: blob.type || "audio/webm" }),
+          new File([blob], `memo.${ext}`, { type: blob.type || "audio/webm" }),
         );
-        const res = await fetch("/api/transcribe", { method: "POST", body: fd });
-        if (!res.ok) throw new Error("transcribe failed");
+        let res: Response | null = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          if (cancelled) return;
+          try {
+            res = await fetch("/api/transcribe", { method: "POST", body: fd });
+            if (res.ok) break;
+          } catch {
+            res = null;
+          }
+          if (attempt === 0) await new Promise((r) => setTimeout(r, 500));
+        }
+        if (!res || !res.ok) throw new Error("transcribe failed");
         const { text } = (await res.json()) as { text: string };
         if (cancelled) return;
         setTranscript(text);
@@ -150,10 +193,8 @@ export default function VoiceReview({
             if (cancelled) return;
             setPassage(p);
             setReference(p.reference);
-            if (p.reference) {
-              const cleaned = stripReferencePrefix(text, p.reference);
-              if (cleaned !== text) setTranscript(cleaned);
-            }
+            const cleaned = applyReferenceReplacement(text, p);
+            if (cleaned !== text) setTranscript(cleaned);
           }
         }
       } catch {
@@ -166,7 +207,7 @@ export default function VoiceReview({
     return () => {
       cancelled = true;
     };
-  }, [blob]);
+  }, [blob, hasRealtime]);
 
   function toggleChat(id: string) {
     setSelectedChatIds((prev) => {
@@ -272,9 +313,11 @@ export default function VoiceReview({
               type="text"
               value={reference ?? ""}
               onChange={(e) => {
+                userEditedReferenceRef.current = true;
                 setReference(e.target.value);
                 setPassage(null);
               }}
+              readOnly={liveTranscribing}
               placeholder="Passage Reference"
               className="min-w-0 flex-1 bg-transparent text-left text-sm font-semibold text-zinc-100 placeholder:text-zinc-500 outline-none"
             />
@@ -284,8 +327,12 @@ export default function VoiceReview({
           ) : (
             <textarea
               value={transcript}
-              onChange={(e) => setTranscript(e.target.value)}
-              placeholder="Your thoughts..."
+              onChange={(e) => {
+                userEditedTranscriptRef.current = true;
+                setTranscript(e.target.value);
+              }}
+              readOnly={liveTranscribing}
+              placeholder={liveTranscribing ? "Transcribing…" : "Your thoughts..."}
               rows={4}
               className="mt-2 w-full resize-none rounded-xl bg-transparent text-[15px] text-zinc-100 placeholder:text-zinc-500 outline-none"
             />
@@ -300,10 +347,14 @@ export default function VoiceReview({
         <div className="mt-auto flex gap-2 pt-2">
           <button
             onClick={send}
-            disabled={sending || transcribing}
+            disabled={sending || transcribing || liveTranscribing}
             className="flex h-20 w-full items-center justify-center rounded-md bg-zinc-300 font-semibold text-zinc-800 active:bg-blue-500/10 disabled:opacity-50"
           >
-            {sending ? "Logging…" : transcribing ? "Transcribing…" : "Log Reading"}
+            {sending
+              ? "Logging…"
+              : transcribing || liveTranscribing
+                ? "Transcribing…"
+                : "Log Reading"}
           </button>
         </div>
       </div>

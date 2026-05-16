@@ -1,27 +1,31 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
+import { PARSE_PASSAGE_SYSTEM } from "./prompt";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-const SYSTEM = `You extract Bible passage references from informal text.
-Return strict JSON: {"book": string|null, "chapter": number|null, "verse_start": number|null, "verse_end": number|null, "reference": string|null}
-- "book" is the canonical full English book name (e.g. "Romans", "1 Corinthians").
-- "reference" is the human-readable form, e.g. "Romans 8:1-11" or "John 3" if no verses.
-- If no passage is mentioned, every field is null.
-- Output JSON only, no prose.`;
 
 export async function POST(request: Request) {
   const { text } = (await request.json()) as { text?: string };
   if (!text || !text.trim()) {
-    return NextResponse.json({ reference: null, book: null, chapter: null, verse_start: null, verse_end: null });
+    return NextResponse.json({ reference: null, book: null, chapter: null, verse_start: null, verse_end: null, matched_text: null });
   }
 
-  const result = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 200,
-    system: SYSTEM,
-    messages: [{ role: "user", content: text }],
-  });
+  let result;
+  try {
+    result = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 256,
+      system: PARSE_PASSAGE_SYSTEM,
+      messages: [{ role: "user", content: text }],
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    console.warn("parse-passage anthropic call failed", { text, detail });
+    return NextResponse.json(
+      { reference: null, book: null, chapter: null, verse_start: null, verse_end: null, matched_text: null },
+      { status: 200 },
+    );
+  }
 
   const block = result.content.find((b) => b.type === "text");
   const raw = block && block.type === "text" ? block.text.trim() : "";
@@ -33,10 +37,14 @@ export async function POST(request: Request) {
 
   try {
     const parsed = JSON.parse(stripped);
+    if (!parsed.reference) {
+      console.warn("parse-passage no reference", { text, raw });
+    }
     return NextResponse.json(parsed);
   } catch {
+    console.warn("parse-passage bad JSON", { text, raw });
     return NextResponse.json(
-      { reference: null, book: null, chapter: null, verse_start: null, verse_end: null },
+      { reference: null, book: null, chapter: null, verse_start: null, verse_end: null, matched_text: null },
       { status: 200 },
     );
   }
