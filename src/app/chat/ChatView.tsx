@@ -15,10 +15,43 @@ type Props = {
   initialMessages: Message[];
 };
 
+function formatDateDivider(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / dayMs);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return d.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
+}
+
+function dayKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
 export default function ChatView({ chatId, chatName, currentUserId, initialMessages }: Props) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [supabase] = useState(() => createClient());
+  const [replyTargetId, setReplyTargetId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const replyTarget = replyTargetId
+    ? messages.find((m) => m.id === replyTargetId) ?? null
+    : null;
+
+  const toggleReplyTarget = (id: string) => {
+    setReplyTargetId((prev) => (prev === id ? null : id));
+  };
+
+  const clearReplyTarget = () => setReplyTargetId(null);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -175,14 +208,28 @@ export default function ChatView({ chatId, chatName, currentUserId, initialMessa
               No messages here yet. Share something from your archive or record below.
             </p>
           ) : (
-            messages.map((m) => (
-              <MessageBubble
-                key={m.id}
-                message={m}
-                isMine={m.user_id === currentUserId}
-                currentUserId={currentUserId}
-              />
-            ))
+            messages.map((m, i) => {
+              const prev = i > 0 ? messages[i - 1] : null;
+              const showDivider = !prev || dayKey(prev.created_at) !== dayKey(m.created_at);
+              return (
+                <div key={m.id} className="flex flex-col gap-3">
+                  {showDivider && (
+                    <div className="flex justify-center py-1">
+                      <span className="text-sm text-stone-400">
+                        {formatDateDivider(m.created_at)}
+                      </span>
+                    </div>
+                  )}
+                  <MessageBubble
+                    message={m}
+                    isMine={m.user_id === currentUserId}
+                    currentUserId={currentUserId}
+                    isReplyTarget={m.id === replyTargetId}
+                    onToggleReplyTarget={toggleReplyTarget}
+                  />
+                </div>
+              );
+            })
           )}
         </div>
       </div>
@@ -192,6 +239,8 @@ export default function ChatView({ chatId, chatName, currentUserId, initialMessa
         currentUserId={currentUserId}
         onOptimistic={addOptimisticMessage}
         onReconcile={reconcileMessageId}
+        replyTarget={replyTarget}
+        onClearReplyTarget={clearReplyTarget}
       />
     </div>
   );
