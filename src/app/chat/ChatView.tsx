@@ -5,12 +5,14 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase";
 import { signAudioPath } from "@/lib/audio";
 import type { Message, Profile, Reaction, Reply } from "@/lib/types";
+import { AvatarStack, type Member } from "@/app/home-shared";
 import MessageBubble from "./MessageBubble";
 import Composer from "./Composer";
 
 type Props = {
   chatId: string;
   chatName: string;
+  members: Member[];
   currentUserId: string;
   initialMessages: Message[];
 };
@@ -37,7 +39,7 @@ function dayKey(iso: string): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
-export default function ChatView({ chatId, chatName, currentUserId, initialMessages }: Props) {
+export default function ChatView({ chatId, chatName, members, currentUserId, initialMessages }: Props) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [supabase] = useState(() => createClient());
   const [replyTargetId, setReplyTargetId] = useState<string | null>(null);
@@ -183,25 +185,28 @@ export default function ChatView({ chatId, chatName, currentUserId, initialMessa
   };
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-stone-200 bg-white/80 px-4 py-3 backdrop-blur">
-        <div className="flex items-center gap-3">
-          <Link href="/chats" className="text-blue-500 active:text-blue-700">
-            ←
-          </Link>
-          <div>
-            <h1 className="text-base font-semibold">{chatName}</h1>
-            <p className="text-xs text-stone-500">
-              {messages.length} message{messages.length === 1 ? "" : "s"}
-            </p>
-          </div>
-        </div>
-        <Link href="/" className="text-sm text-stone-500 active:text-stone-700">
-          Home
+    <div className="relative flex h-full flex-col">
+      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center bg-gradient-to-b from-zinc-900 from-15% to-transparent px-4 pb-10 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <Link
+          href="/"
+          aria-label="Home"
+          className="pointer-events-auto -m-2 flex h-10 w-10 items-center justify-center text-zinc-300 active:text-zinc-100"
+        >
+          <ChevronLeftIcon className="h-6 w-6" />
         </Link>
+        <div className="pointer-events-auto flex flex-1 items-center justify-center gap-2">
+          <span className="truncate text-base font-medium text-zinc-100">
+            {chatName}
+          </span>
+          {members.length > 0 ? <AvatarStack members={members} /> : null}
+        </div>
+        <span aria-hidden className="h-10 w-10" />
       </header>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-4">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto px-3 pb-4 pt-[calc(env(safe-area-inset-top)+5rem)]"
+      >
         <div className="flex flex-col gap-3">
           {messages.length === 0 ? (
             <p className="mt-12 text-center text-sm text-stone-400">
@@ -243,5 +248,22 @@ export default function ChatView({ chatId, chatName, currentUserId, initialMessa
         onClearReplyTarget={clearReplyTarget}
       />
     </div>
+  );
+}
+
+function ChevronLeftIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M15 18L9 12l6-6" />
+    </svg>
   );
 }

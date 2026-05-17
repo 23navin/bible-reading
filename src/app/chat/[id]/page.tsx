@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { signAudioPaths } from "@/lib/audio";
 import type { Message } from "@/lib/types";
+import type { Member } from "@/app/home-shared";
 import ChatView from "../ChatView";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +42,21 @@ export default async function ChatRoutePage({
       </main>
     );
   }
+
+  const { data: memberRows } = await supabase
+    .from("chat_members")
+    .select("profiles(id, display_name)")
+    .eq("chat_id", chatId);
+
+  type MemberRow = { profiles: Member | Member[] | null };
+  const allMembers: Member[] = (memberRows ?? [])
+    .map((row) => {
+      const p = (row as unknown as MemberRow).profiles;
+      return Array.isArray(p) ? p[0] : p;
+    })
+    .filter((p): p is Member => p !== null && p !== undefined);
+  const others = allMembers.filter((m) => m.id !== user.id);
+  const members: Member[] = others.length > 0 ? others : allMembers;
 
   // Pull all message_shares for this chat, joined to the full message + author + reactions + replies.
   const { data: shareRows } = await supabase
@@ -81,6 +97,7 @@ export default async function ChatRoutePage({
     <ChatView
       chatId={chatId}
       chatName={chat.name ?? "Chat"}
+      members={members}
       currentUserId={user.id}
       initialMessages={messages}
     />
