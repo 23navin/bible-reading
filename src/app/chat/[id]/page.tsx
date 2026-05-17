@@ -43,6 +43,8 @@ export default async function ChatRoutePage({
     );
   }
 
+  await supabase.rpc("mark_chat_read", { p_chat_id: chatId });
+
   const { data: memberRows } = await supabase
     .from("chat_members")
     .select("profiles(id, display_name)")

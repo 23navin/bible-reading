@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import VoiceReview from "./VoiceReview";
 import TextComposer from "./TextComposer";
+import { createChat } from "./chats/new/actions";
 import { SpeechmaticsSession } from "@/lib/speechmatics-client";
 import {
   Avatar,
@@ -29,6 +30,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
   const [exiting, setExiting] = useState(false);
   const [recordingReady, setRecordingReady] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [creatingChat, setCreatingChat] = useState(false);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -53,9 +55,13 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
     setLiveTranscribing(false);
     setRecordingReady(false);
     setStopping(false);
+    setCreatingChat(false);
     setMode("recording");
   };
-  const openText = () => setMode("text");
+  const openText = () => {
+    setCreatingChat(false);
+    setMode("text");
+  };
   const closeOverlay = () => {
     if (mode === "review" || mode === "text") {
       setExiting(true);
@@ -386,12 +392,48 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
               </li>
             ))}
             <li>
-              <Link
-                href="/chats/new"
-                className="flex items-center rounded-md py-2 text-zinc-400 active:bg-zinc-800"
-              >
-                <span className="text-lg">new chat</span>
-              </Link>
+              {creatingChat ? (
+                <form action={createChat} className="flex items-center gap-3 py-2">
+                  <input
+                    name="name"
+                    type="text"
+                    required
+                    autoFocus
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    enterKeyHint="go"
+                    placeholder="type a name for this chat"
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        setCreatingChat(false);
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const next = e.relatedTarget as HTMLElement | null;
+                      if (next && e.currentTarget.form?.contains(next)) return;
+                      if (!e.currentTarget.value.trim()) setCreatingChat(false);
+                    }}
+                    className="min-w-0 flex-1 border-0 bg-transparent p-0 text-lg text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-0"
+                  />
+                  <button
+                    type="submit"
+                    onMouseDown={(e) => e.preventDefault()}
+                    className="shrink-0 text-lg text-zinc-100 active:text-zinc-500"
+                  >
+                    create
+                  </button>
+                </form>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setCreatingChat(true)}
+                  className="flex w-full items-center rounded-md py-2 text-left text-zinc-400 active:bg-zinc-800"
+                >
+                  <span className="text-lg">new chat</span>
+                </button>
+              )}
             </li>
           </ul>
         )}
