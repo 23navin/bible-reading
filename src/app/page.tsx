@@ -28,17 +28,23 @@ export default async function HomePage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: profileRow }, { data: memberships }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, username, display_name")
-      .eq("id", user.id)
-      .maybeSingle(),
-    supabase
-      .from("chat_members")
-      .select("chat_id, chats(id, name, chat_members(profiles(id, display_name)))")
-      .eq("user_id", user.id),
-  ]);
+  const [{ data: profileRow }, { data: memberships }, { data: unreadRows }] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, username, display_name")
+        .eq("id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("chat_members")
+        .select("chat_id, chats(id, name, chat_members(profiles(id, display_name)))")
+        .eq("user_id", user.id),
+      supabase.rpc("unread_chat_ids_for_me"),
+    ]);
+
+  const unreadSet = new Set<string>(
+    ((unreadRows ?? []) as string[]).filter((id): id is string => typeof id === "string"),
+  );
 
   const me: Me = {
     id: user.id,
@@ -58,7 +64,7 @@ export default async function HomePage() {
         id: chat.id,
         name: chat.name ?? "Untitled",
         members: others.length > 0 ? others : members,
-        hasUnread: false,
+        hasUnread: unreadSet.has(chat.id),
       };
     })
     .filter((c): c is ChatSummary => c !== null);
