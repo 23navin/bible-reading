@@ -263,7 +263,7 @@ export default function Composer({
 
   return (
     <div className="px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-      {replyTarget ? (
+      {/* {replyTarget ? (
         <div className="mb-2 flex items-center gap-2 rounded-xl bg-stone-100 px-3 py-1.5 text-xs">
           <svg
             viewBox="0 0 24 24"
@@ -288,7 +288,7 @@ export default function Composer({
             ✕
           </button>
         </div>
-      ) : null}
+      ) : null} */}
 
       <div className="flex items-end gap-2">
         {replyTarget ? null : (
@@ -318,7 +318,7 @@ export default function Composer({
             }
           }}
           placeholder={
-            recording ? "Recording…" : replyTarget ? "Reply…" : "Share what you read"
+            recording ? "Recording…" : replyTarget ? `Reply to ${replyAuthor} ${replyPreview}` : "Message"
           }
           rows={1}
           disabled={recording || busy}

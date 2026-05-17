@@ -186,7 +186,8 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
 
   return (
     <div className="relative flex h-full flex-col">
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center bg-gradient-to-b from-zinc-900/70 from-18% to-zinc-900/0 px-4 pb-5 pt-[max(0.25rem,env(safe-area-inset-top))]">
+      {/* <header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center bg-gradient-to-b from-zinc-900/70 from-18% to-zinc-900/0 px-4 pb-5 pt-[max(0.25rem,env(safe-area-inset-top))]"> */}
+      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center bg-zinc-900 px-4 py-2">
         <Link
           href="/"
           aria-label="Home"
