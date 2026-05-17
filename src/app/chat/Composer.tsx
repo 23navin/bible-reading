@@ -14,6 +14,8 @@ type Props = {
   currentUserId: string;
   onOptimistic: (m: Message) => void;
   onReconcile: (optimisticId: string, realId: string) => void;
+  replyTarget: Message | null;
+  onClearReplyTarget: () => void;
 };
 
 async function parsePassage(text: string): Promise<ParsedPassage> {
@@ -39,7 +41,14 @@ async function transcribe(blob: Blob): Promise<string> {
   return text;
 }
 
-export default function Composer({ chatId, currentUserId, onOptimistic, onReconcile }: Props) {
+export default function Composer({
+  chatId,
+  currentUserId,
+  onOptimistic,
+  onReconcile,
+  replyTarget,
+  onClearReplyTarget,
+}: Props) {
   const [supabase] = useState(() => createClient());
   const [text, setText] = useState("");
   const [recording, setRecording] = useState(false);
@@ -167,13 +176,24 @@ export default function Composer({ chatId, currentUserId, onOptimistic, onReconc
     setText("");
     setBusy(true);
     try {
-      const passage = await parsePassage(value);
-      await insertMessage({
-        note: applyReferenceReplacement(value, passage),
-        voice_path: null,
-        transcript: null,
-        passage,
-      });
+      if (replyTarget) {
+        const { error } = await supabase
+          .from("replies")
+          .insert({
+            message_id: replyTarget.id,
+            user_id: currentUserId,
+            body_text: value,
+          });
+        if (error) throw error;
+      } else {
+        const passage = await parsePassage(value);
+        await insertMessage({
+          note: applyReferenceReplacement(value, passage),
+          voice_path: null,
+          transcript: null,
+          passage,
+        });
+      }
     } catch (err) {
       console.error(err);
       alert("Couldn't send.");
@@ -234,23 +254,59 @@ export default function Composer({ chatId, currentUserId, onOptimistic, onReconc
     if (shareErr) throw shareErr;
   };
 
+  const replyAuthor = replyTarget?.profile?.display_name ?? "Someone";
+  const replyPreview =
+    replyTarget?.reference ??
+    replyTarget?.transcript ??
+    replyTarget?.note ??
+    (replyTarget?.voice_path ? "Voice memo" : "");
+
   return (
-    <div className="border-t border-stone-200 bg-white px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+    <div className="px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      {/* {replyTarget ? (
+        <div className="mb-2 flex items-center gap-2 rounded-xl bg-stone-100 px-3 py-1.5 text-xs">
+          <svg
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            className="h-3.5 w-3.5 shrink-0 text-stone-500"
+            aria-hidden
+          >
+            <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" />
+          </svg>
+          <div className="min-w-0 flex-1">
+            <div className="text-stone-500">Replying to {replyAuthor}</div>
+            {replyPreview ? (
+              <div className="truncate text-stone-700">{replyPreview}</div>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClearReplyTarget}
+            aria-label="Cancel reply"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-stone-500 active:bg-stone-200"
+          >
+            ✕
+          </button>
+        </div>
+      ) : null} */}
+
       <div className="flex items-end gap-2">
-        <button
-          type="button"
-          onClick={recording ? stopRecording : startRecording}
-          disabled={busy}
-          aria-label={recording ? "Stop recording" : "Record voice"}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-stone-200 transition-transform duration-150 active:scale-95 disabled:opacity-50"
-        >
-          <span
-            style={{ willChange: "transform, border-radius" }}
-            className={`block h-5 w-5 bg-red-500 transition-[transform,border-radius] duration-300 ease-out ${
-              recording ? "scale-[0.7] rounded-[4px]" : "rounded-full"
-            }`}
-          />
-        </button>
+        {replyTarget ? null : (
+          <button
+            type="button"
+            onClick={recording ? stopRecording : startRecording}
+            disabled={busy}
+            aria-label={recording ? "Stop recording" : "Record voice"}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-stone-200 transition-transform duration-150 active:scale-95 disabled:opacity-50"
+          >
+            <span
+              style={{ willChange: "transform, border-radius" }}
+              className={`block h-5 w-5 bg-red-500 transition-[transform,border-radius] duration-300 ease-out ${
+                recording ? "scale-[0.7] rounded-[4px]" : "rounded-full"
+              }`}
+            />
+          </button>
+        )}
 
         <textarea
           value={text}
@@ -261,10 +317,12 @@ export default function Composer({ chatId, currentUserId, onOptimistic, onReconc
               sendText();
             }
           }}
-          placeholder={recording ? "Recording…" : "Share what you read"}
+          placeholder={
+            recording ? "Recording…" : replyTarget ? `Reply to ${replyAuthor} ${replyPreview}` : "Message"
+          }
           rows={1}
           disabled={recording || busy}
-          className="max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-stone-200 bg-stone-50 px-4 py-2 text-[15px] outline-none focus:border-stone-400 disabled:opacity-60"
+          className="max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-stone-200 bg-stone-50 px-4 py-2 text-[15px] text-stone-900 outline-none focus:border-stone-400 disabled:opacity-60"
         />
 
         <button
