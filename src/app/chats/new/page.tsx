@@ -10,7 +10,7 @@ export default async function NewChatPage({
 
   return (
     <main className="flex h-full flex-col">
-      <header className="flex items-center gap-3 border-b border-stone-200 bg-white px-4 py-3">
+      <header className="flex items-center gap-3 bg-zinc-900 px-4 py-3">
         <Link href="/chats" className="text-blue-500 active:text-blue-700">
           ← Chats
         </Link>
@@ -24,7 +24,7 @@ export default async function NewChatPage({
             type="text"
             required
             placeholder="Chat name (e.g. Tuesday Bible study)"
-            className="rounded-xl border border-stone-200 bg-white px-4 py-3 text-base outline-none focus:border-stone-400"
+            className="rounded-xl bg-zinc-600 px-4 py-3 text-base outline-none focus:border-stone-400"
           />
           <button
             type="submit"
