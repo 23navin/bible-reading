@@ -262,7 +262,7 @@ export default function Composer({
     (replyTarget?.voice_path ? "Voice memo" : "");
 
   return (
-    <div className="border-t border-stone-200 bg-white px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+    <div className="px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       {replyTarget ? (
         <div className="mb-2 flex items-center gap-2 rounded-xl bg-stone-100 px-3 py-1.5 text-xs">
           <svg
@@ -322,7 +322,7 @@ export default function Composer({
           }
           rows={1}
           disabled={recording || busy}
-          className="max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-stone-200 bg-stone-50 px-4 py-2 text-[15px] outline-none focus:border-stone-400 disabled:opacity-60"
+          className="max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-stone-200 bg-stone-50 px-4 py-2 text-[15px] text-stone-900 outline-none focus:border-stone-400 disabled:opacity-60"
         />
 
         <button
