@@ -6,6 +6,7 @@ import VoiceReview from "./VoiceReview";
 import TextComposer from "./TextComposer";
 import { createChat } from "./chats/new/actions";
 import { SpeechmaticsSession } from "@/lib/speechmatics-client";
+import { Shell, Header, Body, Footer } from "./_shell";
 import {
   Avatar,
   AvatarStack,
@@ -328,8 +329,8 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
   const overlayActive = mode === "review" || mode === "text" || exiting;
 
   return (
-    <main className="flex h-full min-h-0 flex-col bg-zinc-900 text-zinc-100">
-      <header className="relative flex shrink-0 items-center justify-between px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
+    <Shell className="bg-zinc-900 text-zinc-100">
+      <Header className="relative flex items-center justify-between px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
         {recording ? (
           <>
             <span className="h-10 w-10" aria-hidden />
@@ -357,9 +358,9 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
             </Link>
           </>
         )}
-      </header>
+      </Header>
 
-      <section className="min-h-0 flex-1 overflow-y-auto px-8">
+      <Body className="px-8">
         {recording ? (
           <div className="screen-fade-in flex h-full items-center justify-center">
             <p className="text-center italic text-md text-zinc-600">
@@ -442,10 +443,10 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
             </li>
           </ul>
         )}
-      </section>
+      </Body>
 
       {mode === "idle" || recording || exiting ? (
-        <div className="shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
+        <Footer className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
           <p
             aria-hidden={!recording}
             className="mb-2 text-center text-sm tabular-nums text-zinc-400"
@@ -486,7 +487,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
           {micError ? (
             <p className="pt-3 text-center text-sm text-red-400">{micError}</p>
           ) : null}
-        </div>
+        </Footer>
       ) : null}
 
       {mode === "review" && blob ? (
@@ -504,7 +505,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
       {mode === "text" ? (
         <TextComposer me={me} chats={chats} onClose={closeOverlay} exiting={exiting} />
       ) : null}
-    </main>
+    </Shell>
   );
 }
 

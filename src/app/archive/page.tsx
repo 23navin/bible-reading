@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase-server";
 import { signAudioPaths } from "@/lib/audio";
 import ArchiveAudioButton from "./ArchiveAudioButton";
+import { Shell, Header, Body } from "../_shell";
 
 export const dynamic = "force-dynamic";
 
@@ -45,8 +46,8 @@ export default async function ArchivePage() {
   );
 
   return (
-    <main className="flex h-full flex-col">
-      <header className="flex items-center gap-3 bg-zinc-900 px-4 py-2">
+    <Shell>
+      <Header className="flex items-center gap-3 bg-zinc-900 px-4 py-2">
         <Link
           href="/"
           aria-label="Home"
@@ -69,9 +70,9 @@ export default async function ArchivePage() {
           {displayName}&apos;s Personal Log
         </h1>
         <span aria-hidden className="h-10 w-10" />
-      </header>
+      </Header>
 
-      <div className="flex-1 overflow-y-auto px-3 py-4">
+      <Body className="px-3 py-4">
         {rows.length === 0 ? (
           <p className="mt-12 text-center text-sm text-stone-400">
             No readings yet. Tap the mic on the home screen.
@@ -136,7 +137,7 @@ export default async function ArchivePage() {
             })}
           </ul>
         )}
-      </div>
-    </main>
+      </Body>
+    </Shell>
   );
 }

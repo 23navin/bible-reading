@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase";
 import { signAudioPath } from "@/lib/audio";
 import type { Message, Profile, Reaction, Reply } from "@/lib/types";
 import { AvatarStack, type Member } from "@/app/home-shared";
+import { Shell, Header, Body, Footer } from "@/app/_shell";
 import MessageBubble from "./MessageBubble";
 import Composer from "./Composer";
 
@@ -43,7 +44,7 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [supabase] = useState(() => createClient());
   const [replyTargetId, setReplyTargetId] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLElement>(null);
 
   const replyTarget = replyTargetId
     ? messages.find((m) => m.id === replyTargetId) ?? null
@@ -185,29 +186,25 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
   };
 
   return (
-    <div className="relative flex h-full flex-col">
-      {/* <header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center bg-gradient-to-b from-zinc-900/70 from-18% to-zinc-900/0 px-4 pb-5 pt-[max(0.25rem,env(safe-area-inset-top))]"> */}
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center bg-zinc-900 px-4 py-2">
+    <Shell>
+      <Header className="flex items-center bg-zinc-900 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2">
         <Link
           href="/"
           aria-label="Home"
-          className="pointer-events-auto -m-2 flex h-10 w-10 items-center justify-center text-zinc-300 active:text-zinc-100"
+          className="-m-2 flex h-10 w-10 items-center justify-center text-zinc-300 active:text-zinc-100"
         >
           <ChevronLeftIcon className="h-6 w-6" />
         </Link>
-        <div className="pointer-events-auto flex flex-1 items-center justify-center gap-2">
+        <div className="flex flex-1 items-center justify-center gap-2">
           <span className="truncate text-base font-medium text-zinc-100">
             {chatName}
           </span>
           {members.length > 0 ? <AvatarStack members={members} /> : null}
         </div>
         <span aria-hidden className="h-10 w-10" />
-      </header>
+      </Header>
 
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto px-3 pb-4 pt-[calc(env(safe-area-inset-top)+5rem)]"
-      >
+      <Body ref={scrollRef} className="px-3 py-4">
         <div className="flex flex-col gap-3">
           {messages.length === 0 ? (
             <p className="mt-12 text-center text-sm text-stone-400">
@@ -238,17 +235,19 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
             })
           )}
         </div>
-      </div>
+      </Body>
 
-      <Composer
-        chatId={chatId}
-        currentUserId={currentUserId}
-        onOptimistic={addOptimisticMessage}
-        onReconcile={reconcileMessageId}
-        replyTarget={replyTarget}
-        onClearReplyTarget={clearReplyTarget}
-      />
-    </div>
+      <Footer>
+        <Composer
+          chatId={chatId}
+          currentUserId={currentUserId}
+          onOptimistic={addOptimisticMessage}
+          onReconcile={reconcileMessageId}
+          replyTarget={replyTarget}
+          onClearReplyTarget={clearReplyTarget}
+        />
+      </Footer>
+    </Shell>
   );
 }
 
