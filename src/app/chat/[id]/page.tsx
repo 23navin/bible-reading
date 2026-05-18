@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { signAudioPaths } from "@/lib/audio";
-import type { Message } from "@/lib/types";
-import type { Member } from "@/app/home-shared";
-import ChatView from "../ChatView";
+import { createServerSupabase } from "@/lib/db/server";
+import { signAudioPaths } from "@/lib/audio/storage";
+import type { Member, Message } from "@/lib/types";
+import ChatView from "./_components/chat-view";
 
 export const dynamic = "force-dynamic";
 
@@ -36,8 +35,8 @@ export default async function ChatRoutePage({
     return (
       <main className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
         <p className="text-base text-stone-500">Chat not found.</p>
-        <Link href="/chats" className="text-sm font-medium text-blue-500">
-          Back to chats
+        <Link href="/" className="text-sm font-medium text-blue-500">
+          Back home
         </Link>
       </main>
     );

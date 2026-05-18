@@ -2,21 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import VoiceReview from "./VoiceReview";
-import TextComposer from "./TextComposer";
-import { createChat } from "./chats/new/actions";
-import { SpeechmaticsSession } from "@/lib/speechmatics-client";
-import { Shell, Header, Body, Footer } from "./_shell";
-import {
-  Avatar,
-  AvatarStack,
-  CloseIcon,
-  type ChatSummary,
-  type Me,
-  type ParsedPassage,
-} from "./home-shared";
-
-export type { ChatSummary, Me, Member } from "./home-shared";
+import VoiceReview from "./voice-review";
+import TextComposer from "./text-composer";
+import { createChat } from "@/app/_actions/create-chat";
+import { SpeechmaticsSession } from "@/lib/speech/speechmatics";
+import { Shell, Header, Body, Footer } from "@/components/shell";
+import { Avatar, AvatarStack } from "@/components/avatar";
+import { CloseIcon } from "@/components/icons";
+import { passageSpecificity, type ParsedPassage } from "@/lib/passage";
+import { formatChatTimestamp, formatElapsed } from "@/lib/format";
+import type { ChatSummary, Me } from "@/lib/types";
 
 type Mode = "idle" | "recording" | "review" | "text";
 
@@ -92,7 +87,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
     // Mint the Speechmatics token in parallel with the start animation and
     // mic-permission prompt so it's ready when SpeechmaticsSession needs it.
     const tokenPromise: Promise<string | undefined> = fetch(
-      "/api/speechmatics-token",
+      "/api/speech/token",
       { method: "POST" },
     )
       .then((r) => (r.ok ? (r.json() as Promise<{ token: string }>) : null))
@@ -110,7 +105,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
       const ac = new AbortController();
       parseAbortRef.current = ac;
       try {
-        const res = await fetch("/api/parse-passage", {
+        const res = await fetch("/api/passages/parse", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text }),
@@ -538,47 +533,3 @@ function KeyboardIcon({ className }: { className?: string }) {
   );
 }
 
-function passageSpecificity(p: ParsedPassage | null): number {
-  if (!p?.reference) return 0;
-  if (p.verse_end != null) return 4;
-  if (p.verse_start != null) return 3;
-  if (p.chapter != null) return 2;
-  if (p.book != null) return 1;
-  return 0;
-}
-
-function formatElapsed(ms: number): string {
-  const total = Math.floor(ms / 1000);
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
-function formatChatTimestamp(iso: string): string {
-  const date = new Date(iso);
-  const now = new Date();
-  const startOfDay = (d: Date) =>
-    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const diffDays = Math.round(
-    (startOfDay(now) - startOfDay(date)) / 86_400_000,
-  );
-  if (diffDays <= 0) {
-    return date
-      .toLocaleTimeString(undefined, {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      })
-      .toLowerCase();
-  }
-  if (diffDays === 1) return "yesterday";
-  if (diffDays < 7) {
-    return date
-      .toLocaleDateString(undefined, { weekday: "long" })
-      .toLowerCase();
-  }
-  const m = date.getMonth() + 1;
-  const d = date.getDate();
-  const y = String(date.getFullYear() % 100).padStart(2, "0");
-  return `${m}/${d}/${y}`;
-}

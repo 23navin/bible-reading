@@ -1,15 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase";
-import {
-  DiscardButton,
-  ShareTargets,
-  applyReferenceReplacement,
-  type ChatSummary,
-  type Me,
-  type ParsedPassage,
-} from "./home-shared";
+import { createClient } from "@/lib/db/client";
+import { DiscardButton } from "@/components/discard-button";
+import { ShareTargets } from "@/components/share-targets";
+import { applyReferenceReplacement, type ParsedPassage } from "@/lib/passage";
+import type { ChatSummary, Me } from "@/lib/types";
 
 const VOICE_BUCKET = "audio-memos";
 
@@ -170,7 +166,7 @@ export default function VoiceReview({
         for (let attempt = 0; attempt < 2; attempt++) {
           if (cancelled) return;
           try {
-            res = await fetch("/api/transcribe", { method: "POST", body: fd });
+            res = await fetch("/api/speech/transcribe", { method: "POST", body: fd });
             if (res.ok) break;
           } catch {
             res = null;
@@ -183,7 +179,7 @@ export default function VoiceReview({
         setTranscript(text);
 
         if (text) {
-          const pRes = await fetch("/api/parse-passage", {
+          const pRes = await fetch("/api/passages/parse", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text }),

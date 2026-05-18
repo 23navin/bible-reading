@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { signAudioPaths } from "@/lib/audio";
-import ArchiveAudioButton from "./ArchiveAudioButton";
-import { Shell, Header, Body } from "../_shell";
+import { createServerSupabase } from "@/lib/db/server";
+import { signAudioPaths } from "@/lib/audio/storage";
+import ArchiveAudioButton from "./_components/archive-audio-button";
+import { Shell, Header, Body } from "@/components/shell";
 
 export const dynamic = "force-dynamic";
 

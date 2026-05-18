@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
-import { createServerSupabase } from "@/lib/supabase-server";
-import HomeView, { type ChatSummary, type Me, type Member } from "./HomeView";
+import { createServerSupabase } from "@/lib/db/server";
+import HomeView from "./_components/home-view";
+import type { ChatSummary, Me, Member } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 

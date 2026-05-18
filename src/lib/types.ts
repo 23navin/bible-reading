@@ -41,3 +41,20 @@ export type Message = {
   reactions?: Reaction[];
   replies?: Reply[];
 };
+
+export type Member = { id: string; display_name: string | null };
+
+export type Me = {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+};
+
+export type ChatSummary = {
+  id: string;
+  name: string;
+  members: Member[];
+  hasUnread: boolean;
+  lastMessageAt: string | null;
+  createdAt: string;
+};

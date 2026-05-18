@@ -185,7 +185,7 @@ export class SpeechmaticsSession {
       for (let attempt = 0; attempt < 2; attempt++) {
         if (this.stopping) return;
         try {
-          const tokenRes = await fetch("/api/speechmatics-token", { method: "POST" });
+          const tokenRes = await fetch("/api/speech/token", { method: "POST" });
           if (!tokenRes.ok) throw new Error("Failed to fetch Speechmatics token");
           const body = (await tokenRes.json()) as { token: string };
           token = body.token;

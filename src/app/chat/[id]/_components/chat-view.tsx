@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase";
-import { signAudioPath } from "@/lib/audio";
-import type { Message, Profile, Reaction, Reply } from "@/lib/types";
-import { AvatarStack, type Member } from "@/app/home-shared";
-import { Shell, Header, Body, Footer } from "@/app/_shell";
-import MessageBubble from "./MessageBubble";
-import Composer from "./Composer";
+import { createClient } from "@/lib/db/client";
+import { signAudioPath } from "@/lib/audio/storage";
+import type { Member, Message, Profile, Reaction, Reply } from "@/lib/types";
+import { AvatarStack } from "@/components/avatar";
+import { Shell, Header, Body, Footer } from "@/components/shell";
+import MessageBubble from "./message-bubble";
+import Composer from "./composer";
 
 type Props = {
   chatId: string;

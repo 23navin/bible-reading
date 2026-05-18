@@ -2,11 +2,11 @@
 
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
-import { createServerSupabase } from "@/lib/supabase-server";
+import { createServerSupabase } from "@/lib/db/server";
 
 export async function createChat(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
-  if (!name) redirect("/chats/new?error=Name+required");
+  if (!name) redirect("/?error=Name+required");
 
   const supabase = await createServerSupabase();
   const {
@@ -25,7 +25,7 @@ export async function createChat(formData: FormData) {
     .insert({ id: chatId, name, type: "group" });
 
   if (error) {
-    redirect(`/chats/new?error=${encodeURIComponent(error.message)}`);
+    redirect(`/?error=${encodeURIComponent(error.message)}`);
   }
 
   const { error: memberErr } = await supabase
@@ -33,7 +33,7 @@ export async function createChat(formData: FormData) {
     .insert({ chat_id: chatId, user_id: user.id });
 
   if (memberErr) {
-    redirect(`/chats/new?error=${encodeURIComponent(memberErr.message)}`);
+    redirect(`/?error=${encodeURIComponent(memberErr.message)}`);
   }
 
   redirect(`/chat/${chatId}`);

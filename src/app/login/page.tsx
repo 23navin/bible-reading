@@ -1,4 +1,4 @@
-import { authenticate } from "../auth/actions";
+import { authenticate } from "./_actions/authenticate";
 
 export default async function LoginPage({
   searchParams,

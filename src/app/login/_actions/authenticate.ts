@@ -1,8 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { isValidUsername, normalizeUsername, usernameToEmail } from "@/lib/username";
+import { createServerSupabase } from "@/lib/db/server";
+import { isValidUsername, normalizeUsername, usernameToEmail } from "@/lib/auth/username";
 
 // Only allow redirect targets that are same-origin paths — anything else
 // (protocol-relative `//evil.com`, absolute URLs) gets dropped to "/".

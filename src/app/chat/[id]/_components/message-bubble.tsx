@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase";
+import { createClient } from "@/lib/db/client";
 import type { Message } from "@/lib/types";
 
 type Props = {
