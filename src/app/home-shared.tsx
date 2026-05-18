@@ -8,6 +8,8 @@ export type ChatSummary = {
   name: string;
   members: Member[];
   hasUnread: boolean;
+  lastMessageAt: string | null;
+  createdAt: string;
 };
 export type Me = {
   id: string;
