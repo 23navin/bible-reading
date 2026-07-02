@@ -42,6 +42,15 @@ button {
   }
 }
 
+/* App shell: header / body / footer morph independently between routes.
+   Names match <ViewTransition name="..."> in src/app/_shell.tsx. */
+::view-transition-group(app-header),
+::view-transition-group(app-body),
+::view-transition-group(app-footer) {
+  animation-duration: 280ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 @keyframes screen-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }

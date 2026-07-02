@@ -2,20 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import VoiceReview from "./VoiceReview";
-import TextComposer from "./TextComposer";
-import { createChat } from "./chats/new/actions";
-import { SpeechmaticsSession } from "@/lib/speechmatics-client";
-import {
-  Avatar,
-  AvatarStack,
-  CloseIcon,
-  type ChatSummary,
-  type Me,
-  type ParsedPassage,
-} from "./home-shared";
-
-export type { ChatSummary, Me, Member } from "./home-shared";
+import VoiceReview from "./voice-review";
+import TextComposer from "./text-composer";
+import { createChat } from "@/app/_actions/create-chat";
+import { SpeechmaticsSession } from "@/lib/speech/speechmatics";
+import { Shell, Header, Body, Footer } from "@/components/shell";
+import { Avatar, AvatarStack } from "@/components/avatar";
+import { CloseIcon } from "@/components/icons";
+import { passageSpecificity, type ParsedPassage } from "@/lib/passage";
+import { formatChatTimestamp, formatElapsed } from "@/lib/format";
+import type { ChatSummary, Me } from "@/lib/types";
 
 type Mode = "idle" | "recording" | "review" | "text";
 
@@ -91,7 +87,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
     // Mint the Speechmatics token in parallel with the start animation and
     // mic-permission prompt so it's ready when SpeechmaticsSession needs it.
     const tokenPromise: Promise<string | undefined> = fetch(
-      "/api/speechmatics-token",
+      "/api/speech/token",
       { method: "POST" },
     )
       .then((r) => (r.ok ? (r.json() as Promise<{ token: string }>) : null))
@@ -109,7 +105,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
       const ac = new AbortController();
       parseAbortRef.current = ac;
       try {
-        const res = await fetch("/api/parse-passage", {
+        const res = await fetch("/api/passages/parse", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text }),
@@ -323,13 +319,13 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
     recorderRef.current = null;
   }
 
-  const displayName = me.display_name ?? me.username ?? "friend";
+  const displayName = me.display_name ?? me.username ?? "Unknown";
   const recording = mode === "recording";
   const overlayActive = mode === "review" || mode === "text" || exiting;
 
   return (
-    <main className="flex h-full min-h-0 flex-col bg-zinc-900 text-zinc-100">
-      <header className="relative flex shrink-0 items-center justify-between px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
+    <Shell className="bg-zinc-900 text-zinc-100">
+      <Header className="relative flex items-center justify-between px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
         {recording ? (
           <>
             <span className="h-10 w-10" aria-hidden />
@@ -345,7 +341,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
         ) : (
           <>
             <h1 className="text-2xl font-semibold tracking-tight">
-              <span className="text-white">{displayName}</span>&apos;s Reading Log
+              <span className="text-white">{displayName}</span>&apos;s reading log
             </h1>
             <Link
               href="/archive"
@@ -357,9 +353,9 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
             </Link>
           </>
         )}
-      </header>
+      </Header>
 
-      <section className="min-h-0 flex-1 overflow-y-auto px-8">
+      <Body className="px-8">
         {recording ? (
           <div className="screen-fade-in flex h-full items-center justify-center">
             <p className="text-center italic text-md text-zinc-600">
@@ -388,6 +384,11 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
                   />
                   <span className="text-lg text-zinc-100">{c.name}</span>
                   <AvatarStack members={c.members} />
+                  {c.lastMessageAt ? (
+                    <span className="ml-auto shrink-0 text-sm tabular-nums text-zinc-500">
+                      {formatChatTimestamp(c.lastMessageAt)}
+                    </span>
+                  ) : null}
                 </Link>
               </li>
             ))}
@@ -437,10 +438,10 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
             </li>
           </ul>
         )}
-      </section>
+      </Body>
 
       {mode === "idle" || recording || exiting ? (
-        <div className="shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
+        <Footer className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
           <p
             aria-hidden={!recording}
             className="mb-2 text-center text-sm tabular-nums text-zinc-400"
@@ -481,7 +482,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
           {micError ? (
             <p className="pt-3 text-center text-sm text-red-400">{micError}</p>
           ) : null}
-        </div>
+        </Footer>
       ) : null}
 
       {mode === "review" && blob ? (
@@ -499,7 +500,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
       {mode === "text" ? (
         <TextComposer me={me} chats={chats} onClose={closeOverlay} exiting={exiting} />
       ) : null}
-    </main>
+    </Shell>
   );
 }
 
@@ -532,18 +533,3 @@ function KeyboardIcon({ className }: { className?: string }) {
   );
 }
 
-function passageSpecificity(p: ParsedPassage | null): number {
-  if (!p?.reference) return 0;
-  if (p.verse_end != null) return 4;
-  if (p.verse_start != null) return 3;
-  if (p.chapter != null) return 2;
-  if (p.book != null) return 1;
-  return 0;
-}
-
-function formatElapsed(ms: number): string {
-  const total = Math.floor(ms / 1000);
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}

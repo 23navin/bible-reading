@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createServerSupabase } from "@/lib/supabase-server";
-import { signAudioPaths } from "@/lib/audio";
-import ArchiveAudioButton from "./ArchiveAudioButton";
+import { createServerSupabase } from "@/lib/db/server";
+import { signAudioPaths } from "@/lib/audio/storage";
+import ArchiveAudioButton from "./_components/archive-audio-button";
+import { Shell, Header, Body } from "@/components/shell";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,7 @@ export default async function ArchivePage() {
     supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
   ]);
 
-  const displayName = profile?.display_name ?? "Your";
+  const displayName = profile?.display_name ?? "Unknown";
 
   const rows = (data ?? []) as Row[];
   const signedUrls = await signAudioPaths(
@@ -45,8 +46,8 @@ export default async function ArchivePage() {
   );
 
   return (
-    <main className="flex h-full flex-col">
-      <header className="flex items-center gap-3 bg-zinc-900 px-4 py-2">
+    <Shell>
+      <Header className="flex items-center gap-3 bg-zinc-900 px-4 py-2">
         <Link
           href="/"
           aria-label="Home"
@@ -66,12 +67,12 @@ export default async function ArchivePage() {
           </svg>
         </Link>
         <h1 className="flex-1 truncate text-center text-base font-semibold">
-          {displayName}&apos;s Personal Log
+          {displayName}&apos;s personal log
         </h1>
         <span aria-hidden className="h-10 w-10" />
-      </header>
+      </Header>
 
-      <div className="flex-1 overflow-y-auto px-3 py-4">
+      <Body className="px-3 py-4">
         {rows.length === 0 ? (
           <p className="mt-12 text-center text-sm text-stone-400">
             No readings yet. Tap the mic on the home screen.
@@ -136,7 +137,7 @@ export default async function ArchivePage() {
             })}
           </ul>
         )}
-      </div>
-    </main>
+      </Body>
+    </Shell>
   );
 }

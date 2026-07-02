@@ -1,10 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { createClient } from "@/lib/supabase";
-import { SpeechmaticsSession } from "@/lib/speechmatics-client";
+import { createClient } from "@/lib/db/client";
+import { SpeechmaticsSession } from "@/lib/speech/speechmatics";
+import { applyReferenceReplacement, type ParsedPassage } from "@/lib/passage";
 import type { Message } from "@/lib/types";
-import { applyReferenceReplacement, type ParsedPassage } from "../home-shared";
 
 // Assumes a public Supabase Storage bucket named "voice-memos".
 const VOICE_BUCKET = "audio-memos";
@@ -20,7 +20,7 @@ type Props = {
 
 async function parsePassage(text: string): Promise<ParsedPassage> {
   try {
-    const res = await fetch("/api/parse-passage", {
+    const res = await fetch("/api/passages/parse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
@@ -35,7 +35,7 @@ async function parsePassage(text: string): Promise<ParsedPassage> {
 async function transcribe(blob: Blob): Promise<string> {
   const fd = new FormData();
   fd.append("file", new File([blob], "memo.webm", { type: blob.type || "audio/webm" }));
-  const res = await fetch("/api/transcribe", { method: "POST", body: fd });
+  const res = await fetch("/api/speech/transcribe", { method: "POST", body: fd });
   if (!res.ok) throw new Error("transcribe failed");
   const { text } = (await res.json()) as { text: string };
   return text;
