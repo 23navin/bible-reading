@@ -1,7 +1,7 @@
 // Map usernames to synthetic emails for Supabase Auth.
 // Disable "Confirm email" in Supabase Dashboard -> Authentication -> Providers -> Email.
 
-const EMAIL_DOMAIN = "scriptureshare.local";
+const EMAIL_DOMAIN = "vercel.user";
 
 export function normalizeUsername(raw: string): string {
   return raw.trim().toLowerCase();

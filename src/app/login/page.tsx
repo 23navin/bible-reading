@@ -10,11 +10,11 @@ export default async function LoginPage({
   return (
     <main className="flex h-full flex-col items-center justify-center px-6">
       <div className="w-full max-w-sm">
-        <h1 className="mb-1 text-center text-3xl font-bold tracking-tight">
-          ScriptureShare
+        <h1 className="mb-8 text-center text-5xl font-bold tracking-tight">
+          Reading Log
         </h1>
-        <p className="mb-8 text-center text-sm text-stone-500">
-          Pick a username and password. New here? We&apos;ll make an account.
+        <p className="mb-2 text-center text-sm text-stone-500">
+          Log in or Create an Account
         </p>
 
         <form action={authenticate} className="space-y-3">

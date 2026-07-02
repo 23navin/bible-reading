@@ -37,7 +37,7 @@ export default async function ArchivePage() {
     supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
   ]);
 
-  const displayName = profile?.display_name ?? "Your";
+  const displayName = profile?.display_name ?? "Unknown";
 
   const rows = (data ?? []) as Row[];
   const signedUrls = await signAudioPaths(
@@ -67,7 +67,7 @@ export default async function ArchivePage() {
           </svg>
         </Link>
         <h1 className="flex-1 truncate text-center text-base font-semibold">
-          {displayName}&apos;s Personal Log
+          {displayName}&apos;s personal log
         </h1>
         <span aria-hidden className="h-10 w-10" />
       </Header>

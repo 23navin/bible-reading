@@ -319,7 +319,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
     recorderRef.current = null;
   }
 
-  const displayName = me.display_name ?? me.username ?? "friend";
+  const displayName = me.display_name ?? me.username ?? "Unknown";
   const recording = mode === "recording";
   const overlayActive = mode === "review" || mode === "text" || exiting;
 
@@ -341,7 +341,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
         ) : (
           <>
             <h1 className="text-2xl font-semibold tracking-tight">
-              <span className="text-white">{displayName}</span>&apos;s Reading Log
+              <span className="text-white">{displayName}</span>&apos;s reading log
             </h1>
             <Link
               href="/archive"

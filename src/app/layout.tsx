@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ScriptureShare",
-  description: "Share what you're reading with your group.",
+  title: "Reading Log",
+  description: "Log and Share what you are reading",
 };
 
 export const viewport: Viewport = {
