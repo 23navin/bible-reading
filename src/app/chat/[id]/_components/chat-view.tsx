@@ -7,6 +7,7 @@ import { signAudioPath } from "@/lib/audio/storage";
 import type { Member, Message, Profile, Reaction, Reply } from "@/lib/types";
 import { AvatarStack } from "@/components/avatar";
 import { Shell, Header, Body, Footer } from "@/components/shell";
+import { useHydrated } from "@/components/local-time";
 import MessageBubble from "./message-bubble";
 import Composer from "./composer";
 
@@ -45,6 +46,9 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
   const [supabase] = useState(() => createClient());
   const [replyTargetId, setReplyTargetId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLElement>(null);
+  // Day grouping depends on the viewer's timezone, so dividers can only be
+  // computed after hydration.
+  const hydrated = useHydrated();
 
   const replyTarget = replyTargetId
     ? messages.find((m) => m.id === replyTargetId) ?? null
@@ -75,7 +79,7 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
       const { data } = await supabase
         .from("messages")
         .select(
-          "id, user_id, reference, book, chapter, verse_start, verse_end, note, voice_path, transcript, created_at, profile:profiles!messages_user_id_fkey(id, display_name), reactions(message_id, user_id, emoji), replies(id, message_id, user_id, body_text, created_at, profile:profiles!replies_user_id_fkey(id, display_name))",
+          "id, user_id, reference, book, chapter, verse_start, verse_end, note, voice_path, transcript, created_at, created_tz, profile:profiles!messages_user_id_fkey(id, display_name), reactions(message_id, user_id, emoji), replies(id, message_id, user_id, body_text, created_at, profile:profiles!replies_user_id_fkey(id, display_name))",
         )
         .eq("id", messageId)
         .maybeSingle();
@@ -213,7 +217,8 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
           ) : (
             messages.map((m, i) => {
               const prev = i > 0 ? messages[i - 1] : null;
-              const showDivider = !prev || dayKey(prev.created_at) !== dayKey(m.created_at);
+              const showDivider =
+                hydrated && (!prev || dayKey(prev.created_at) !== dayKey(m.created_at));
               return (
                 <div key={m.id} className="flex flex-col gap-3">
                   {showDivider && (

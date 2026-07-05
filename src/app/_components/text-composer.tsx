@@ -71,6 +71,7 @@ export default function TextComposer({
           chapter: passage?.chapter ?? null,
           verse_start: passage?.verse_start ?? null,
           verse_end: passage?.verse_end ?? null,
+          created_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
         })
         .select("id")
         .single();
@@ -113,7 +114,7 @@ export default function TextComposer({
           <div className="flex items-center gap-3">
             <span
               aria-hidden
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-700 font-sans text-base italic text-zinc-100"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-700 font-mono text-base italic text-zinc-100"
             >
               t
             </span>
@@ -134,7 +135,7 @@ export default function TextComposer({
             onBlur={parse}
             placeholder="Your thoughts..."
             rows={4}
-            className="mt-2 w-full resize-none rounded-xl bg-transparent text-[15px] text-zinc-100 placeholder:text-zinc-500 outline-none"
+            className="mt-2 w-full resize-none bg-transparent text-[15px] text-zinc-100 placeholder:text-zinc-500 outline-none"
           />
         </div>
 

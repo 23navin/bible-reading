@@ -11,6 +11,7 @@ import { Avatar, AvatarStack } from "@/components/avatar";
 import { CloseIcon } from "@/components/icons";
 import { passageSpecificity, type ParsedPassage } from "@/lib/passage";
 import { formatChatTimestamp, formatElapsed } from "@/lib/format";
+import { useHydrated } from "@/components/local-time";
 import type { ChatSummary, Me } from "@/lib/types";
 
 type Mode = "idle" | "recording" | "review" | "text";
@@ -27,6 +28,9 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
   const [recordingReady, setRecordingReady] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [creatingChat, setCreatingChat] = useState(false);
+  // Chat timestamps depend on the viewer's timezone, so they can only be
+  // rendered after hydration.
+  const hydrated = useHydrated();
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -386,7 +390,7 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
                   <AvatarStack members={c.members} />
                   {c.lastMessageAt ? (
                     <span className="ml-auto shrink-0 text-sm tabular-nums text-zinc-500">
-                      {formatChatTimestamp(c.lastMessageAt)}
+                      {hydrated ? formatChatTimestamp(c.lastMessageAt) : null}
                     </span>
                   ) : null}
                 </Link>

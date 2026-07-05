@@ -222,6 +222,7 @@ export default function Composer({
       voice_path: args.voice_path,
       transcript: args.transcript,
       created_at: new Date().toISOString(),
+      created_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
       reactions: [],
       replies: [],
     };
@@ -239,6 +240,7 @@ export default function Composer({
         note: args.note,
         voice_path: args.voice_path,
         transcript: args.transcript,
+        created_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
       })
       .select("id")
       .single();
