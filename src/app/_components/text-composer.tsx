@@ -71,6 +71,7 @@ export default function TextComposer({
           chapter: passage?.chapter ?? null,
           verse_start: passage?.verse_start ?? null,
           verse_end: passage?.verse_end ?? null,
+          created_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
         })
         .select("id")
         .single();

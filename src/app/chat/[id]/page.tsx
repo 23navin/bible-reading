@@ -66,7 +66,7 @@ export default async function ChatRoutePage({
       `created_at,
        messages (
          id, user_id, reference, book, chapter, verse_start, verse_end,
-         note, voice_path, transcript, created_at,
+         note, voice_path, transcript, created_at, created_tz,
          profile:profiles!messages_user_id_fkey(id, display_name),
          reactions(message_id, user_id, emoji),
          replies(id, message_id, user_id, body_text, created_at, profile:profiles!replies_user_id_fkey(id, display_name))

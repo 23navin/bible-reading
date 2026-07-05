@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/db/client";
 import type { Message } from "@/lib/types";
+import LocalTime from "@/components/local-time";
 
 type Props = {
   message: Message;
@@ -158,16 +159,17 @@ export default function MessageBubble({
   const body = message.transcript ?? message.note;
   const hasAudio = Boolean(message.voice_signed_url);
   const authorName = message.profile?.display_name ?? "Someone";
-  const time = new Date(message.created_at).toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
 
   return (
     <div className={`flex flex-col ${isMine ? "items-end" : "items-start"}`}>
       <div className={`mb-0.5 flex items-baseline gap-1 px-4 text-sm ${isMine ? "flex-row-reverse" : ""}`}>
         {!isMine ? <span className="text-stone-200">{authorName}</span> : null}
-        <span className="text-stone-400">{time}</span>
+        <LocalTime
+          iso={message.created_at}
+          timeZone={message.created_tz}
+          options={{ hour: "numeric", minute: "2-digit" }}
+          className="text-stone-400"
+        />
       </div>
 
       <div

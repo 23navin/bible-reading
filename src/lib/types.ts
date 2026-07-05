@@ -37,6 +37,9 @@ export type Message = {
   voice_signed_url?: string | null;
   transcript: string | null;
   created_at: string;
+  // IANA timezone of the author's device at creation time; null on rows
+  // predating the column.
+  created_tz: string | null;
   profile?: Profile | null;
   reactions?: Reaction[];
   replies?: Reply[];

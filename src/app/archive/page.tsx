@@ -4,6 +4,7 @@ import { createServerSupabase } from "@/lib/db/server";
 import { signAudioPaths } from "@/lib/audio/storage";
 import ArchiveAudioButton from "./_components/archive-audio-button";
 import { Shell, Header, Body } from "@/components/shell";
+import LocalTime from "@/components/local-time";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ type Row = {
   voice_path: string | null;
   transcript: string | null;
   created_at: string;
+  created_tz: string | null;
   message_shares: { chat_id: string; chats: { id: string; name: string | null } | { id: string; name: string | null }[] | null }[] | null;
 };
 
@@ -28,7 +30,7 @@ export default async function ArchivePage() {
     supabase
       .from("messages")
       .select(
-        "id, reference, note, voice_path, transcript, created_at, message_shares(chat_id, chats(id, name))",
+        "id, reference, note, voice_path, transcript, created_at, created_tz, message_shares(chat_id, chats(id, name))",
       )
       .eq("user_id", user.id)
       .not("reference", "is", null)
@@ -80,12 +82,6 @@ export default async function ArchivePage() {
         ) : (
           <ul className="flex flex-col gap-3">
             {rows.map((m) => {
-              const date = new Date(m.created_at).toLocaleString([], {
-                month: "short",
-                day: "numeric",
-                hour: "numeric",
-                minute: "2-digit",
-              });
               const shares = (m.message_shares ?? [])
                 .map((s) => (Array.isArray(s.chats) ? s.chats[0] : s.chats))
                 .filter((c): c is { id: string; name: string | null } => c !== null);
@@ -102,7 +98,7 @@ export default async function ArchivePage() {
                       ) : (
                         <span
                           aria-hidden
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 font-serif text-base italic text-white"
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 font-mono text-base italic text-white"
                         >
                           t
                         </span>
@@ -111,7 +107,17 @@ export default async function ArchivePage() {
                         <div className="text-sm font-semibold">
                           {m.reference ?? "Untitled reading"}
                         </div>
-                        <div className="shrink-0 text-xs text-white/70">{date}</div>
+                        <LocalTime
+                          iso={m.created_at}
+                          timeZone={m.created_tz}
+                          options={{
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          }}
+                          className="shrink-0 text-xs text-white/70"
+                        />
                       </div>
                     </div>
                     {body ? (
