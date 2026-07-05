@@ -20,6 +20,24 @@ export function applyReferenceReplacement(
   return text.replace(passage.matched_text, passage.reference);
 }
 
+export function stripLeadingReference(
+  text: string,
+  reference: string | null,
+): string {
+  if (!text || !reference) return text;
+  const trimmed = text.trimStart();
+  if (!trimmed.toLowerCase().startsWith(reference.toLowerCase())) return text;
+  const rest = trimmed.slice(reference.length);
+  const sep = rest.match(/^[\s.,:;!?—–-]+/);
+  if (!sep) return text;
+  const body = rest.slice(sep[0].length);
+  // Only strip when what follows reads as a new sentence — a lowercase
+  // continuation ("Lamentations 3, which is about...") means the reference
+  // is part of the sentence and must stay.
+  if (!body || !/^[A-Z"'“(\[]/.test(body)) return text;
+  return body;
+}
+
 export function passageSpecificity(p: ParsedPassage | null): number {
   if (!p?.reference) return 0;
   if (p.verse_end != null) return 4;

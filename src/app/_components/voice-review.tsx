@@ -4,7 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/db/client";
 import { DiscardButton } from "@/components/discard-button";
 import { ShareTargets } from "@/components/share-targets";
-import { applyReferenceReplacement, type ParsedPassage } from "@/lib/passage";
+import {
+  applyReferenceReplacement,
+  stripLeadingReference,
+  type ParsedPassage,
+} from "@/lib/passage";
 import type { ChatSummary, Me } from "@/lib/types";
 
 const VOICE_BUCKET = "audio-memos";
@@ -45,6 +49,9 @@ export default function VoiceReview({
   );
   const userEditedTranscriptRef = useRef(false);
   const userEditedReferenceRef = useRef(false);
+  const cleanupStartedRef = useRef(false);
+  const cleanedAppliedRef = useRef(false);
+  const cleanupAbortRef = useRef<AbortController | null>(null);
 
   // Mirror realtime props into local state until the user edits the field.
   // We can't gate this on `liveTranscribing` — the parent often batches the
@@ -55,7 +62,7 @@ export default function VoiceReview({
     if (!hasRealtime) return;
     const t = initialTranscript ?? "";
     const ref = initialPassage?.reference ?? null;
-    if (!userEditedTranscriptRef.current) {
+    if (!userEditedTranscriptRef.current && !cleanedAppliedRef.current) {
       setTranscript(applyReferenceReplacement(t, initialPassage ?? null));
     }
     if (!userEditedReferenceRef.current) {
@@ -63,6 +70,44 @@ export default function VoiceReview({
       setPassage(initialPassage ?? null);
     }
   }, [hasRealtime, initialTranscript, initialPassage]);
+
+  // Once the transcript is final, strip a leading standalone reference right
+  // away (deterministic), then run the one-shot LLM cleanup in the background
+  // and swap the result in — unless the user has started editing.
+  useEffect(() => {
+    if (cleanupStartedRef.current) return;
+    if (transcribing || liveTranscribing) return;
+    if (!transcript.trim()) return;
+    cleanupStartedRef.current = true;
+
+    const base = stripLeadingReference(transcript, reference);
+    if (base !== transcript && !userEditedTranscriptRef.current) {
+      setTranscript(base);
+    }
+
+    const controller = new AbortController();
+    cleanupAbortRef.current = controller;
+    (async () => {
+      try {
+        const res = await fetch("/api/transcripts/cleanup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: base, reference }),
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+        const { text } = (await res.json()) as { text?: string };
+        if (text && text.trim() && !userEditedTranscriptRef.current) {
+          cleanedAppliedRef.current = true;
+          setTranscript(text);
+        }
+      } catch {
+        // Fail soft — the stripped transcript stays in place.
+      }
+    })();
+  }, [transcribing, liveTranscribing, transcript, reference]);
+
+  useEffect(() => () => cleanupAbortRef.current?.abort(), []);
   const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
