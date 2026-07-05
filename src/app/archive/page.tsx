@@ -4,6 +4,7 @@ import { createServerSupabase } from "@/lib/db/server";
 import { signAudioPaths } from "@/lib/audio/storage";
 import ArchiveAudioButton from "./_components/archive-audio-button";
 import { Shell, Header, Body } from "@/components/shell";
+import { CloseIcon } from "@/components/icons";
 import LocalTime from "@/components/local-time";
 
 export const dynamic = "force-dynamic";
@@ -48,30 +49,18 @@ export default async function ArchivePage() {
   );
 
   return (
-    <Shell>
-      <Header className="flex items-center gap-3 bg-zinc-900 px-4 py-2">
+    <Shell className="bg-zinc-900 text-zinc-100">
+      <Header className="flex items-center justify-between px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          <span className="text-white">{displayName}</span>&apos;s personal log
+        </h1>
         <Link
           href="/"
-          aria-label="Home"
-          className="-m-2 flex h-10 w-10 items-center justify-center text-zinc-300 active:text-zinc-100"
+          aria-label="Close archive"
+          className="flex h-10 w-10 items-center justify-center rounded-full active:bg-zinc-800"
         >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-6 w-6"
-            aria-hidden
-          >
-            <path d="M15 18L9 12l6-6" />
-          </svg>
+          <CloseIcon className="h-6 w-6 text-zinc-300" />
         </Link>
-        <h1 className="flex-1 truncate text-center text-base font-semibold">
-          {displayName}&apos;s personal log
-        </h1>
-        <span aria-hidden className="h-10 w-10" />
       </Header>
 
       <Body className="px-3 py-4">
