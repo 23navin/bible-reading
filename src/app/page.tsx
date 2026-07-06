@@ -2,6 +2,11 @@ import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/db/server";
 import { ProfileCookieSync } from "@/components/profile-cookie";
 import HomeView from "./_components/home-view";
+import {
+  bibleComUrl,
+  formatEntryPassage,
+  type NextReading,
+} from "@/lib/reading-plan";
 import type { ChatSummary, Me, Member } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +41,7 @@ export default async function HomePage() {
     await Promise.all([
       supabase
         .from("profiles")
-        .select("id, username, display_name")
+        .select("id, username, display_name, reading_plan_id")
         .eq("id", user.id)
         .maybeSingle(),
       supabase
@@ -75,6 +80,32 @@ export default async function HomePage() {
     display_name: profileRow?.display_name ?? profileRow?.username ?? null,
   };
 
+  let nextReading: NextReading | null = null;
+  const planId: string | null = profileRow?.reading_plan_id ?? null;
+  if (planId) {
+    const [{ data: entries }, { data: progress }] = await Promise.all([
+      supabase
+        .from("reading_plan_entries")
+        .select("date, begin_chapter, end_chapter")
+        .eq("plan_id", planId)
+        .order("date", { ascending: true }),
+      supabase
+        .from("reading_plan_progress")
+        .select("date")
+        .eq("user_id", user.id)
+        .eq("plan_id", planId),
+    ]);
+    const done = new Set((progress ?? []).map((p: { date: string }) => p.date));
+    const next = (entries ?? []).find((e: { date: string }) => !done.has(e.date)) ?? null;
+    if (next) {
+      nextReading = {
+        date: next.date,
+        passage: formatEntryPassage(next),
+        href: bibleComUrl(next),
+      };
+    }
+  }
+
   const chats: ChatSummary[] = ((memberships ?? []) as MembershipRow[])
     .map((row): ChatSummary | null => {
       const chat = Array.isArray(row.chats) ? row.chats[0] : row.chats;
@@ -101,7 +132,7 @@ export default async function HomePage() {
 
   return (
     <>
-      <HomeView me={me} chats={chats} />
+      <HomeView me={me} chats={chats} nextReading={nextReading} />
       <ProfileCookieSync id={me.id} name={me.display_name} />
     </>
   );

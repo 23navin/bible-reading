@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Shell, Header, Body } from "@/components/shell";
-import { CloseIcon } from "@/components/icons";
+import { CloseIcon, GearIcon } from "@/components/icons";
 
 // Shared page chrome so the real page and loading.tsx render identical
 // frames — the Suspense swap only touches the name and the list.
@@ -17,13 +17,22 @@ export function ArchiveFrame({
         <h1 className="text-2xl font-semibold tracking-tight">
           <span className="text-white">{name}</span>&apos;s personal log
         </h1>
-        <Link
-          href="/"
-          aria-label="Close archive"
-          className="flex h-10 w-10 items-center justify-center rounded-full active:bg-zinc-800"
-        >
-          <CloseIcon className="h-6 w-6 text-zinc-300" />
-        </Link>
+        <div className="flex shrink-0 items-center">
+          <Link
+            href="/settings"
+            aria-label="Open settings"
+            className="flex h-10 w-10 items-center justify-center rounded-full active:bg-zinc-800"
+          >
+            <GearIcon className="h-6 w-6 text-zinc-300" />
+          </Link>
+          <Link
+            href="/"
+            aria-label="Close archive"
+            className="flex h-10 w-10 items-center justify-center rounded-full active:bg-zinc-800"
+          >
+            <CloseIcon className="h-6 w-6 text-zinc-300" />
+          </Link>
+        </div>
       </Header>
 
       <Body className="px-3 py-4">{children}</Body>
