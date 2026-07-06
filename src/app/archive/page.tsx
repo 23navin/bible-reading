@@ -126,9 +126,11 @@ async function ArchiveList({ sessionPromise }: { sessionPromise: Promise<Session
                 ) : (
                   <span
                     aria-hidden
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 font-mono text-base italic text-white"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20"
                   >
-                    t
+                    <span className="translate-x-[-0.5px] font-mono text-base italic text-white">
+                      t
+                    </span>
                   </span>
                 )}
                 <div className="flex flex-1 items-center justify-between gap-3">
