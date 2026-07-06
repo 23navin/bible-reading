@@ -9,13 +9,22 @@ import { SpeechmaticsSession } from "@/lib/speech/speechmatics";
 import { Shell, Header, Body, Footer } from "@/components/shell";
 import { Avatar, AvatarStack } from "@/components/avatar";
 import { CloseIcon } from "@/components/icons";
-import { formatChatTimestamp, formatElapsed } from "@/lib/format";
+import { formatChatTimestamp, formatElapsed, formatPlanDate } from "@/lib/format";
 import { useHydrated } from "@/components/local-time";
 import type { ChatSummary, Me } from "@/lib/types";
+import type { NextReading } from "@/lib/reading-plan";
 
 type Mode = "idle" | "recording" | "review" | "text";
 
-export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }) {
+export default function HomeView({
+  me,
+  chats,
+  nextReading,
+}: {
+  me: Me;
+  chats: ChatSummary[];
+  nextReading: NextReading | null;
+}) {
   const [mode, setMode] = useState<Mode>("idle");
   const [blob, setBlob] = useState<Blob | null>(null);
   const [realtimeTranscript, setRealtimeTranscript] = useState<string | null>(null);
@@ -375,12 +384,15 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
 
       {mode === "idle" || recording || exiting ? (
         <Footer className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
-          <p
-            aria-hidden={!recording}
-            className="mb-2 text-center text-sm tabular-nums text-zinc-400"
-          >
-            {recording && recordingReady ? formatElapsed(elapsedMs) : " "}
-          </p>
+          <div className="mb-2 flex min-h-5 justify-center text-sm text-zinc-400">
+            {recording ? (
+              <p aria-hidden={!recordingReady} className="text-center tabular-nums">
+                {recordingReady ? formatElapsed(elapsedMs) : " "}
+              </p>
+            ) : hydrated ? (
+              <NextReadingPrompt reading={nextReading} />
+            ) : null}
+          </div>
           <div className="flex">
             <button
               type="button"
@@ -433,6 +445,31 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
         <TextComposer me={me} chats={chats} onClose={closeOverlay} exiting={exiting} />
       ) : null}
     </Shell>
+  );
+}
+
+// "Next reading: Jun 1 Micah 5" — the earliest plan day without a progress
+// row, with the reference deep-linking into the bible app. Rendered
+// post-hydration only: the date label depends on the viewer's timezone.
+function NextReadingPrompt({ reading }: { reading: NextReading | null }) {
+  if (!reading) return null;
+
+  return (
+    <p className="text-left">
+      Next reading: {formatPlanDate(reading.date)}{" "}
+      {reading.href ? (
+        <a
+          href={reading.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-semibold text-zinc-100 underline decoration-zinc-500 underline-offset-4 active:text-zinc-400"
+        >
+          {reading.passage}
+        </a>
+      ) : (
+        <span className="font-semibold text-zinc-100">{reading.passage}</span>
+      )}
+    </p>
   );
 }
 

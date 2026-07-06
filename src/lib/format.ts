@@ -5,6 +5,28 @@ export function formatElapsed(ms: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+// Plan-day label: "today" / "yesterday" / "tomorrow", weekday within a week
+// (either direction), otherwise "Jan 5" (with year if not this year).
+export function formatPlanDate(isoDate: string): string {
+  const date = new Date(`${isoDate}T00:00:00`);
+  const now = new Date();
+  const startOfDay = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diffDays = Math.round((startOfDay(date) - startOfDay(now)) / 86_400_000);
+  if (diffDays === 0) return "today";
+  if (diffDays === -1) return "yesterday";
+  if (diffDays === 1) return "tomorrow";
+  if (Math.abs(diffDays) < 7) {
+    return date
+      .toLocaleDateString(undefined, { weekday: "long" })
+      .toLowerCase();
+  }
+  const label = date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return date.getFullYear() === now.getFullYear()
+    ? label
+    : `${label}, ${date.getFullYear()}`;
+}
+
 export function formatChatTimestamp(iso: string): string {
   const date = new Date(iso);
   const now = new Date();
