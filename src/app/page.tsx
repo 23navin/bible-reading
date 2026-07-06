@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/db/server";
+import { ProfileCookieSync } from "@/components/profile-cookie";
 import HomeView from "./_components/home-view";
 import type { ChatSummary, Me, Member } from "@/lib/types";
 
@@ -98,5 +99,10 @@ export default async function HomePage() {
         Date.parse(a.lastMessageAt ?? a.createdAt),
     );
 
-  return <HomeView me={me} chats={chats} />;
+  return (
+    <>
+      <HomeView me={me} chats={chats} />
+      <ProfileCookieSync id={me.id} name={me.display_name} />
+    </>
+  );
 }

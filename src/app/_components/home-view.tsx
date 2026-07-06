@@ -9,7 +9,6 @@ import { SpeechmaticsSession } from "@/lib/speech/speechmatics";
 import { Shell, Header, Body, Footer } from "@/components/shell";
 import { Avatar, AvatarStack } from "@/components/avatar";
 import { CloseIcon } from "@/components/icons";
-import { passageSpecificity, type ParsedPassage } from "@/lib/passage";
 import { formatChatTimestamp, formatElapsed } from "@/lib/format";
 import { useHydrated } from "@/components/local-time";
 import type { ChatSummary, Me } from "@/lib/types";
@@ -20,7 +19,6 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
   const [mode, setMode] = useState<Mode>("idle");
   const [blob, setBlob] = useState<Blob | null>(null);
   const [realtimeTranscript, setRealtimeTranscript] = useState<string | null>(null);
-  const [realtimePassage, setRealtimePassage] = useState<ParsedPassage | null>(null);
   const [liveTranscribing, setLiveTranscribing] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
@@ -37,21 +35,16 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
   const startedAtRef = useRef<number | null>(null);
   const sessionRef = useRef<SpeechmaticsSession | null>(null);
   const finalTextRef = useRef("");
-  const parsedRef = useRef<ParsedPassage | null>(null);
-  const parseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const parseAbortRef = useRef<AbortController | null>(null);
   const realtimeFailedRef = useRef(false);
 
   const openVoice = () => {
     setMicError(null);
     finalTextRef.current = "";
-    parsedRef.current = null;
     realtimeFailedRef.current = false;
     // Empty string (vs. null) signals to VoiceReview that realtime is the
     // source of truth; we'll fall back to null only if the session fails
     // before stop.
     setRealtimeTranscript("");
-    setRealtimePassage(null);
     setLiveTranscribing(false);
     setRecordingReady(false);
     setStopping(false);
@@ -69,7 +62,6 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
         setMode("idle");
         setBlob(null);
         setRealtimeTranscript(null);
-        setRealtimePassage(null);
         setLiveTranscribing(false);
         setExiting(false);
       }, 200);
@@ -77,7 +69,6 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
       setMode("idle");
       setBlob(null);
       setRealtimeTranscript(null);
-      setRealtimePassage(null);
       setLiveTranscribing(false);
     }
   };
@@ -98,45 +89,6 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
       .then((d) => d?.token)
       .catch(() => undefined);
 
-    const runParse = async () => {
-      // Skip if we already have a fully-specified reference (book + chapter
-      // + verse range). Partial hits (book-only, chapter-only) must remain
-      // re-parsable as the transcript grows.
-      if (passageSpecificity(parsedRef.current) >= 4) return;
-      const text = finalTextRef.current.trim();
-      if (!text) return;
-      parseAbortRef.current?.abort();
-      const ac = new AbortController();
-      parseAbortRef.current = ac;
-      try {
-        const res = await fetch("/api/passages/parse", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
-          signal: ac.signal,
-        });
-        if (!res.ok) return;
-        const p = (await res.json()) as ParsedPassage;
-        if (parseAbortRef.current !== ac) return;
-        if (!p.reference) return;
-        // Guard against a re-parse that returns less detail than what we
-        // already have — Haiku occasionally regresses on longer transcripts.
-        if (passageSpecificity(p) < passageSpecificity(parsedRef.current)) return;
-        parsedRef.current = p;
-        setRealtimePassage(p);
-      } catch {
-        // Aborted or network error — leave for a later attempt or fallback.
-      }
-    };
-
-    const scheduleParse = () => {
-      if (parsedRef.current?.reference) return;
-      if (parseTimerRef.current) clearTimeout(parseTimerRef.current);
-      parseTimerRef.current = setTimeout(() => {
-        void runParse();
-      }, 500);
-    };
-
     const finalizeAndOpenReview = async (recordedBlob: Blob) => {
       // Null the session ref before any setMode so the mode-change cleanup
       // below doesn't abort the live session out from under us.
@@ -148,14 +100,15 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
         // VoiceReview, which will transcribe it itself.
         session?.abort();
         setRealtimeTranscript(null);
-        setRealtimePassage(null);
         setBlob(recordedBlob);
         setMode("review");
         return;
       }
 
       // Realtime is alive. Move to review immediately so the user sees the
-      // streaming transcript fill in, and finish stop+parse in the background.
+      // streaming transcript fill in, and finish the stop in the background.
+      // Cleanup + passage parsing happen in VoiceReview once the transcript
+      // settles.
       setBlob(recordedBlob);
       setLiveTranscribing(true);
       setMode("review");
@@ -169,22 +122,6 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
           console.warn("speechmatics stop failed", err);
         }
       }
-
-      // Speechmatics emits trailing finals while session.stop() awaits
-      // EndOfTranscript. Each one schedules a debounced parse — if any of
-      // those timers fire after this point they'll abort the explicit
-      // runParse below and leave parsedRef null. Drain them now.
-      if (parseTimerRef.current) {
-        clearTimeout(parseTimerRef.current);
-        parseTimerRef.current = null;
-      }
-      parseAbortRef.current?.abort();
-      parseAbortRef.current = null;
-
-      if (finalTextRef.current) {
-        await runParse();
-      }
-      setRealtimePassage(parsedRef.current);
       setLiveTranscribing(false);
     };
 
@@ -206,7 +143,6 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
         activeRec = rec;
         chunksRef.current = [];
         finalTextRef.current = "";
-        parsedRef.current = null;
         realtimeFailedRef.current = false;
         rec.ondataavailable = (e) => {
           if (e.data.size > 0) chunksRef.current.push(e.data);
@@ -229,7 +165,6 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
           onFinal: (full) => {
             finalTextRef.current = full;
             setRealtimeTranscript(full);
-            scheduleParse();
           },
           onError: (err) => {
             console.warn("speechmatics error", err);
@@ -291,12 +226,6 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
         sessionRef.current.abort();
         sessionRef.current = null;
       }
-      if (parseTimerRef.current) {
-        clearTimeout(parseTimerRef.current);
-        parseTimerRef.current = null;
-      }
-      parseAbortRef.current?.abort();
-      parseAbortRef.current = null;
     };
   }, [mode]);
 
@@ -495,7 +424,6 @@ export default function HomeView({ me, chats }: { me: Me; chats: ChatSummary[] }
           chats={chats}
           blob={blob}
           initialTranscript={realtimeTranscript}
-          initialPassage={realtimePassage}
           liveTranscribing={liveTranscribing}
           onClose={closeOverlay}
           exiting={exiting}

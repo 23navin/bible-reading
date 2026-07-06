@@ -20,11 +20,3 @@ export function applyReferenceReplacement(
   return text.replace(passage.matched_text, passage.reference);
 }
 
-export function passageSpecificity(p: ParsedPassage | null): number {
-  if (!p?.reference) return 0;
-  if (p.verse_end != null) return 4;
-  if (p.verse_start != null) return 3;
-  if (p.chapter != null) return 2;
-  if (p.book != null) return 1;
-  return 0;
-}

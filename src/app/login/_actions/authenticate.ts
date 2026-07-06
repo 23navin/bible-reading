@@ -1,8 +1,22 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/db/server";
 import { isValidUsername, normalizeUsername, usernameToEmail } from "@/lib/auth/username";
+import {
+  PROFILE_COOKIE,
+  profileCookieOptions,
+  serializeProfileCookie,
+} from "@/lib/auth/profile-cookie";
+
+async function setProfileCookie(id: string, name: string) {
+  (await cookies()).set(
+    PROFILE_COOKIE,
+    serializeProfileCookie({ id, name }),
+    profileCookieOptions,
+  );
+}
 
 // Only allow redirect targets that are same-origin paths — anything else
 // (protocol-relative `//evil.com`, absolute URLs) gets dropped to "/".
@@ -35,6 +49,16 @@ export async function authenticate(formData: FormData) {
 
   const signIn = await supabase.auth.signInWithPassword({ email, password });
   if (!signIn.error) {
+    if (signIn.data.user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", signIn.data.user.id)
+        .maybeSingle();
+      if (profile?.display_name) {
+        await setProfileCookie(signIn.data.user.id, profile.display_name);
+      }
+    }
     redirect(next);
   }
 
@@ -61,6 +85,7 @@ export async function authenticate(formData: FormData) {
         { id: signUp.data.user.id, username, display_name: username },
         { onConflict: "id" },
       );
+    await setProfileCookie(signUp.data.user.id, username);
   }
 
   // If email confirmation is enabled, signUp returns no session — surface that clearly.
@@ -77,5 +102,6 @@ export async function authenticate(formData: FormData) {
 export async function signOut() {
   const supabase = await createServerSupabase();
   await supabase.auth.signOut();
+  (await cookies()).delete(PROFILE_COOKIE);
   redirect("/login");
 }

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/db/client";
 import { DiscardButton } from "@/components/discard-button";
 import { ShareTargets } from "@/components/share-targets";
-import { applyReferenceReplacement, type ParsedPassage } from "@/lib/passage";
+import type { ParsedPassage } from "@/lib/passage";
 import type { ChatSummary, Me } from "@/lib/types";
 
 const VOICE_BUCKET = "audio-memos";
@@ -14,7 +14,6 @@ export default function VoiceReview({
   chats,
   blob,
   initialTranscript,
-  initialPassage,
   liveTranscribing = false,
   onClose,
   exiting = false,
@@ -24,8 +23,6 @@ export default function VoiceReview({
   blob: Blob;
   /** If provided, skip the Whisper fallback and use this transcript directly. */
   initialTranscript?: string | null;
-  /** If provided, skip parse-passage and use this. */
-  initialPassage?: ParsedPassage | null;
   /** True while the realtime session is still streaming finals after stop. */
   liveTranscribing?: boolean;
   onClose: () => void;
@@ -33,18 +30,16 @@ export default function VoiceReview({
 }) {
   const hasRealtime = typeof initialTranscript === "string";
   const [supabase] = useState(() => createClient());
-  const [transcript, setTranscript] = useState(() =>
-    applyReferenceReplacement(initialTranscript ?? "", initialPassage ?? null),
-  );
+  const [transcript, setTranscript] = useState(initialTranscript ?? "");
   const [transcribing, setTranscribing] = useState(!hasRealtime);
-  const [reference, setReference] = useState<string | null>(
-    initialPassage?.reference ?? null,
-  );
-  const [passage, setPassage] = useState<ParsedPassage | null>(
-    initialPassage ?? null,
-  );
+  const [cleanupSettled, setCleanupSettled] = useState(false);
+  const [reference, setReference] = useState<string | null>(null);
+  const [passage, setPassage] = useState<ParsedPassage | null>(null);
   const userEditedTranscriptRef = useRef(false);
   const userEditedReferenceRef = useRef(false);
+  const cleanupStartedRef = useRef(false);
+  const cleanedAppliedRef = useRef(false);
+  const cleanupAbortRef = useRef<AbortController | null>(null);
 
   // Mirror realtime props into local state until the user edits the field.
   // We can't gate this on `liveTranscribing` — the parent often batches the
@@ -53,16 +48,60 @@ export default function VoiceReview({
   // drop the parse result.
   useEffect(() => {
     if (!hasRealtime) return;
-    const t = initialTranscript ?? "";
-    const ref = initialPassage?.reference ?? null;
-    if (!userEditedTranscriptRef.current) {
-      setTranscript(applyReferenceReplacement(t, initialPassage ?? null));
+    if (!userEditedTranscriptRef.current && !cleanedAppliedRef.current) {
+      setTranscript(initialTranscript ?? "");
     }
-    if (!userEditedReferenceRef.current) {
-      setReference(ref);
-      setPassage(initialPassage ?? null);
-    }
-  }, [hasRealtime, initialTranscript, initialPassage]);
+  }, [hasRealtime, initialTranscript]);
+
+  // Once the transcript is final, run the one-shot cleanup + passage-parse
+  // call and swap the results in — unless the user has started editing that
+  // field. Sending is gated on this settling so a log never lands in the
+  // archive with a null reference the model would have found.
+  useEffect(() => {
+    if (cleanupStartedRef.current) return;
+    if (transcribing || liveTranscribing) return;
+    if (!transcript.trim()) return;
+    cleanupStartedRef.current = true;
+
+    const controller = new AbortController();
+    cleanupAbortRef.current = controller;
+    // Don't hold the Log button hostage if the call hangs.
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+    (async () => {
+      try {
+        const res = await fetch("/api/transcripts/cleanup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: transcript }),
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+        const p = (await res.json()) as ParsedPassage & { text?: string };
+        if (p.text && p.text.trim() && !userEditedTranscriptRef.current) {
+          cleanedAppliedRef.current = true;
+          setTranscript(p.text);
+        }
+        if (p.reference && !userEditedReferenceRef.current) {
+          setReference(p.reference);
+          setPassage({
+            book: p.book ?? null,
+            chapter: p.chapter ?? null,
+            verse_start: p.verse_start ?? null,
+            verse_end: p.verse_end ?? null,
+            reference: p.reference,
+            matched_text: null,
+          });
+        }
+      } catch {
+        // Fail soft — the raw transcript stays; the user can type a reference.
+      } finally {
+        clearTimeout(timeout);
+        setCleanupSettled(true);
+      }
+    })();
+  }, [transcribing, liveTranscribing, transcript]);
+
+  useEffect(() => () => cleanupAbortRef.current?.abort(), []);
   const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -176,23 +215,9 @@ export default function VoiceReview({
         if (!res || !res.ok) throw new Error("transcribe failed");
         const { text } = (await res.json()) as { text: string };
         if (cancelled) return;
+        // Reference parsing happens in the cleanup effect once transcribing
+        // settles — no separate parse call here.
         setTranscript(text);
-
-        if (text) {
-          const pRes = await fetch("/api/passages/parse", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text }),
-          });
-          if (pRes.ok) {
-            const p = (await pRes.json()) as ParsedPassage;
-            if (cancelled) return;
-            setPassage(p);
-            setReference(p.reference);
-            const cleaned = applyReferenceReplacement(text, p);
-            if (cleaned !== text) setTranscript(cleaned);
-          }
-        }
       } catch {
         if (!cancelled)
           setError("Couldn't transcribe. You can still send the recording.");
@@ -264,6 +289,15 @@ export default function VoiceReview({
       setSending(false);
     }
   }
+
+  // True from the moment the transcript settles until the cleanup call
+  // resolves — sending waits on it so a log never lands with a reference
+  // the model was still about to find.
+  const polishing =
+    !cleanupSettled &&
+    !transcribing &&
+    !liveTranscribing &&
+    transcript.trim().length > 0;
 
   return (
     <div
@@ -344,14 +378,16 @@ export default function VoiceReview({
         <div className="mt-auto flex gap-2 pt-2">
           <button
             onClick={send}
-            disabled={sending || transcribing || liveTranscribing}
+            disabled={sending || transcribing || liveTranscribing || polishing}
             className="flex h-20 w-full items-center justify-center rounded-md bg-zinc-300 font-semibold text-zinc-800 active:bg-blue-500/10 disabled:opacity-50"
           >
             {sending
               ? "Logging…"
               : transcribing || liveTranscribing
                 ? "Transcribing…"
-                : "Log Reading"}
+                : polishing
+                  ? "Polishing…"
+                  : "Log Reading"}
           </button>
         </div>
       </div>
