@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/db/client";
 import { DiscardButton } from "@/components/discard-button";
 import { ShareTargets } from "@/components/share-targets";
@@ -18,6 +19,7 @@ export default function TextComposer({
   onClose: () => void;
   exiting?: boolean;
 }) {
+  const router = useRouter();
   const [supabase] = useState(() => createClient());
   const [text, setText] = useState("");
   const [reference, setReference] = useState<string | null>(null);
@@ -78,6 +80,9 @@ export default function TextComposer({
         if (shareErr) throw shareErr;
       }
 
+      // The insert's DB trigger may have marked a plan day complete, so
+      // re-fetch the server-rendered next reading (and chat timestamps).
+      router.refresh();
       onClose();
     } catch (err) {
       console.error("send failed", err);
@@ -124,7 +129,7 @@ export default function TextComposer({
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Your thoughts..."
-            rows={4}
+            rows={6}
             className="mt-2 w-full resize-none bg-transparent text-[15px] text-neutral-100 placeholder:text-neutral-500 outline-none"
           />
         </div>

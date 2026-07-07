@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/db/client";
 import { DiscardButton } from "@/components/discard-button";
 import { ShareTargets } from "@/components/share-targets";
@@ -29,6 +30,7 @@ export default function VoiceReview({
   exiting?: boolean;
 }) {
   const hasRealtime = typeof initialTranscript === "string";
+  const router = useRouter();
   const [supabase] = useState(() => createClient());
   const [transcript, setTranscript] = useState(initialTranscript ?? "");
   const [transcribing, setTranscribing] = useState(!hasRealtime);
@@ -280,6 +282,9 @@ export default function VoiceReview({
         if (shareErr) throw shareErr;
       }
 
+      // The insert's DB trigger may have marked a plan day complete, so
+      // re-fetch the server-rendered next reading (and chat timestamps).
+      router.refresh();
       onClose();
     } catch (err) {
       console.error("send failed", err);
@@ -364,8 +369,8 @@ export default function VoiceReview({
               }}
               readOnly={liveTranscribing}
               placeholder={liveTranscribing ? "Transcribing…" : "Your thoughts..."}
-              rows={4}
-              className="mt-2 w-full resize-none rounded-xl bg-transparent text-[15px] text-neutral-100 placeholder:text-neutral-500 outline-none"
+              rows={6}
+              className="mt-2 w-full resize-none bg-transparent text-[15px] text-neutral-100 placeholder:text-neutral-500 outline-none"
             />
           )}
         </div>
