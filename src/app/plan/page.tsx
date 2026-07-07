@@ -1,9 +1,13 @@
+import { Suspense } from "react";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { ProfileFrame } from "@/components/profile-frame";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { ProfileFrame, NameSkeleton } from "@/components/profile-frame";
 import { ProfileCookieSync } from "@/components/profile-cookie";
+import { PROFILE_COOKIE, parseProfileCookie } from "@/lib/auth/profile-cookie";
 import { CheckIcon } from "@/components/icons";
 import { createServerSupabase } from "@/lib/db/server";
-import { signAudioPaths } from "@/lib/audio/storage";
+import { getAuthUser, type AuthUser } from "@/lib/auth/user";
 import {
   bibleComUrl,
   formatEntryPassage,
@@ -11,6 +15,7 @@ import {
   type ReadingPlanEntry,
 } from "@/lib/reading-plan";
 import ArchiveAudioButton from "@/app/archive/_components/archive-audio-button";
+import { PlanSkeleton } from "./_components/plan-skeleton";
 import { setReadingPlan } from "./_actions/set-reading-plan";
 
 export const dynamic = "force-dynamic";
@@ -30,14 +35,68 @@ type LogRow = {
 
 type ProgressRow = { date: string; messages: LogRow | LogRow[] | null };
 
-export default async function ReadingPlanPage() {
-  const supabase = await createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+type PlanData = {
+  user: AuthUser | null;
+  displayName: string | null;
+  selectedId: string | null;
+  plans: PlanRow[];
+  entries: EntryRow[];
+  logByDate: Map<string, LogRow>;
+  doneDates: Set<string>;
+};
 
-  const [{ data: profile }, { data: planRows }] = await Promise.all([
+// Days of a plan plus the progress rows (with their completing logs).
+async function fetchPlanDetail(supabase: SupabaseClient, userId: string, planId: string) {
+  const [{ data: entryRows }, { data: progressRows }] = await Promise.all([
+    supabase
+      .from("reading_plan_entries")
+      .select("date, begin_chapter, end_chapter")
+      .eq("plan_id", planId)
+      .order("date", { ascending: true }),
+    supabase
+      .from("reading_plan_progress")
+      .select(
+        "date, messages(id, reference, note, voice_path, transcript, created_at)",
+      )
+      .eq("user_id", userId)
+      .eq("plan_id", planId),
+  ]);
+  return {
+    entries: (entryRows ?? []) as EntryRow[],
+    progress: (progressRows ?? []) as ProgressRow[],
+  };
+}
+
+// Everything the page needs, in (usually) one database round trip: the JWT is
+// verified locally, so user.id is known without a network hop, and the
+// profile cookie caches the selected plan id, so the entries/progress queries
+// can run alongside the profiles/plans queries instead of after them. The
+// profiles row stays authoritative: a stale cookie just costs one extra
+// round trip to refetch the right plan.
+async function loadPlanData(cookiePlanId: string | null | undefined): Promise<PlanData> {
+  const empty: PlanData = {
+    user: null,
+    displayName: null,
+    selectedId: null,
+    plans: [],
+    entries: [],
+    logByDate: new Map(),
+    doneDates: new Set(),
+  };
+
+  const supabase = await createServerSupabase();
+  const user = await getAuthUser(supabase);
+  if (!user) return empty;
+
+  const guessPromise =
+    typeof cookiePlanId === "string"
+      ? fetchPlanDetail(supabase, user.id, cookiePlanId)
+      : null;
+  // The guess may be discarded below (stale cookie) — don't let its failure
+  // surface as an unhandled rejection.
+  guessPromise?.catch(() => {});
+
+  const [{ data: profileRow }, { data: planRows }] = await Promise.all([
     supabase
       .from("profiles")
       .select("reading_plan_id, display_name")
@@ -49,49 +108,74 @@ export default async function ReadingPlanPage() {
       .order("display_name"),
   ]);
 
-  const selectedId = profile?.reading_plan_id ?? null;
-  const plans = (planRows ?? []) as PlanRow[];
+  const selectedId = profileRow?.reading_plan_id ?? null;
 
-  // Days of the selected plan, each paired with the log that completed it
-  // (via reading_plan_progress).
   let entries: EntryRow[] = [];
   const logByDate = new Map<string, LogRow>();
   const doneDates = new Set<string>();
-  let signedUrls: Record<string, string> = {};
   if (selectedId) {
-    const [{ data: entryRows }, { data: progressRows }] = await Promise.all([
-      supabase
-        .from("reading_plan_entries")
-        .select("date, begin_chapter, end_chapter")
-        .eq("plan_id", selectedId)
-        .order("date", { ascending: true }),
-      supabase
-        .from("reading_plan_progress")
-        .select(
-          "date, messages(id, reference, note, voice_path, transcript, created_at)",
-        )
-        .eq("user_id", user.id)
-        .eq("plan_id", selectedId),
-    ]);
-    entries = (entryRows ?? []) as EntryRow[];
-    for (const p of (progressRows ?? []) as ProgressRow[]) {
+    const detail =
+      guessPromise && cookiePlanId === selectedId
+        ? await guessPromise
+        : await fetchPlanDetail(supabase, user.id, selectedId);
+    entries = detail.entries;
+    for (const p of detail.progress) {
       doneDates.add(p.date);
       const log = Array.isArray(p.messages) ? p.messages[0] : p.messages;
       if (log) logByDate.set(p.date, log);
     }
-    signedUrls = await signAudioPaths(
-      supabase,
-      [...logByDate.values()].map((l) => l.voice_path),
-    );
   }
+
+  return {
+    user,
+    displayName: profileRow?.display_name ?? null,
+    selectedId,
+    plans: (planRows ?? []) as PlanRow[],
+    entries,
+    logByDate,
+    doneDates,
+  };
+}
+
+// Like /archive, the frame streams immediately: only the cookie read is
+// awaited before returning JSX; the data resolves inside Suspense.
+export default async function ReadingPlanPage() {
+  const profile = parseProfileCookie((await cookies()).get(PROFILE_COOKIE)?.value);
+  const dataPromise = loadPlanData(profile?.planId);
 
   return (
     <ProfileFrame
       tab="plan"
-      name={profile?.display_name ?? "Unknown"}
       contentClassName="px-8"
+      name={
+        profile?.name || (
+          <Suspense fallback={<NameSkeleton />}>
+            <DisplayName dataPromise={dataPromise} />
+          </Suspense>
+        )
+      }
     >
-      <ProfileCookieSync id={user.id} name={profile?.display_name ?? null} />
+      <Suspense fallback={<PlanSkeleton />}>
+        <PlanContent dataPromise={dataPromise} />
+      </Suspense>
+    </ProfileFrame>
+  );
+}
+
+async function DisplayName({ dataPromise }: { dataPromise: Promise<PlanData> }) {
+  const { user, displayName } = await dataPromise;
+  if (!user) return null; // PlanContent handles the login redirect
+  return <>{displayName ?? "Unknown"}</>;
+}
+
+async function PlanContent({ dataPromise }: { dataPromise: Promise<PlanData> }) {
+  const { user, displayName, selectedId, plans, entries, logByDate, doneDates } =
+    await dataPromise;
+  if (!user) redirect("/login");
+
+  return (
+    <>
+      <ProfileCookieSync id={user.id} name={displayName} planId={selectedId} />
       <form action={setReadingPlan} className="flex flex-col gap-1">
         <PlanOption id="" name="No plan" selected={selectedId === null} />
         {plans.map((plan) => (
@@ -108,26 +192,18 @@ export default async function ReadingPlanPage() {
 
       {entries.length > 0 ? (
         <ul className="-mx-4 mt-8 flex flex-col gap-3 pb-8">
-          {entries.map((entry) => {
-            const log = logByDate.get(entry.date) ?? null;
-            return (
-              <li key={entry.date}>
-                <EntryCard
-                  entry={entry}
-                  log={log}
-                  done={doneDates.has(entry.date)}
-                  audioSrc={
-                    log?.voice_path
-                      ? (signedUrls[log.voice_path] ?? null)
-                      : null
-                  }
-                />
-              </li>
-            );
-          })}
+          {entries.map((entry) => (
+            <li key={entry.date}>
+              <EntryCard
+                entry={entry}
+                log={logByDate.get(entry.date) ?? null}
+                done={doneDates.has(entry.date)}
+              />
+            </li>
+          ))}
         </ul>
       ) : null}
-    </ProfileFrame>
+    </>
   );
 }
 
@@ -135,12 +211,10 @@ function EntryCard({
   entry,
   log,
   done,
-  audioSrc,
 }: {
   entry: EntryRow;
   log: LogRow | null;
   done: boolean;
-  audioSrc: string | null;
 }) {
   const dateLabel = new Date(`${entry.date}T00:00:00`).toLocaleDateString(
     "en-US",
@@ -182,8 +256,8 @@ function EntryCard({
   return (
     <div className="rounded-2xl bg-zinc-800 px-4 py-2.5 text-white">
       <div className="flex items-center gap-3">
-        {audioSrc ? (
-          <ArchiveAudioButton src={audioSrc} />
+        {log.voice_path ? (
+          <ArchiveAudioButton path={log.voice_path} />
         ) : (
           <span
             aria-hidden

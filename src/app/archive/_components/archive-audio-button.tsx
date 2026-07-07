@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { signAudio } from "@/app/_actions/sign-audio";
 
-export default function ArchiveAudioButton({ src }: { src: string }) {
+// The signed URL is fetched on the first tap rather than at page render, so
+// pages listing many memos don't sign every path up front. The URL is kept on
+// the <audio> element afterwards, so subsequent taps play immediately.
+export default function ArchiveAudioButton({ path }: { path: string }) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -20,18 +25,28 @@ export default function ArchiveAudioButton({ src }: { src: string }) {
       audio.removeEventListener("pause", onPause);
       audio.removeEventListener("ended", onEnded);
     };
-  }, [src]);
+  }, []);
 
-  const togglePlay = () => {
+  const togglePlay = async () => {
     const audio = audioRef.current;
-    if (!audio) return;
-    if (audio.paused) {
-      audio.play().catch((err) => {
-        console.error("audio play failed", err);
-      });
-    } else {
+    if (!audio || isLoading) return;
+    if (!audio.paused) {
       audio.pause();
+      return;
     }
+    if (!audio.src) {
+      setIsLoading(true);
+      try {
+        const url = await signAudio(path);
+        if (!url) return;
+        audio.src = url;
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    audio.play().catch((err) => {
+      console.error("audio play failed", err);
+    });
   };
 
   return (
@@ -39,7 +54,7 @@ export default function ArchiveAudioButton({ src }: { src: string }) {
       <button
         onClick={togglePlay}
         aria-label={isPlaying ? "Pause audio" : "Play audio"}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-white active:scale-95"
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-white active:scale-95 ${isLoading ? "animate-pulse" : ""}`}
       >
         {isPlaying ? (
           <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
@@ -52,7 +67,7 @@ export default function ArchiveAudioButton({ src }: { src: string }) {
           </svg>
         )}
       </button>
-      <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
+      <audio ref={audioRef} preload="none" className="hidden" />
     </>
   );
 }

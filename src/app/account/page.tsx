@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { ProfileFrame } from "@/components/profile-frame";
 import { ProfileCookieSync } from "@/components/profile-cookie";
 import { createServerSupabase } from "@/lib/db/server";
+import { getAuthUser } from "@/lib/auth/user";
 import { signOut } from "@/app/login/_actions/authenticate";
 import { DisplayNameEditor } from "./_components/display-name-editor";
 
@@ -9,9 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AccountPage() {
   const supabase = await createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser(supabase);
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase

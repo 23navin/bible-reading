@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/db/server";
+import { getAuthUser } from "@/lib/auth/user";
 import { ProfileCookieSync } from "@/components/profile-cookie";
 import HomeView from "./_components/home-view";
 import {
@@ -32,9 +33,7 @@ type MembershipRow = {
 export default async function HomePage() {
   const supabase = await createServerSupabase();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser(supabase);
   if (!user) redirect("/login");
 
   const [{ data: profileRow }, { data: memberships }, { data: unreadRows }] =
@@ -133,7 +132,7 @@ export default async function HomePage() {
   return (
     <>
       <HomeView me={me} chats={chats} nextReading={nextReading} />
-      <ProfileCookieSync id={me.id} name={me.display_name} />
+      <ProfileCookieSync id={me.id} name={me.display_name} planId={planId} />
     </>
   );
 }
