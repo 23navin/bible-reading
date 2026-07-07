@@ -4,7 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/db/client";
 import { DiscardButton } from "@/components/discard-button";
 import { ShareTargets } from "@/components/share-targets";
-import { applyReferenceReplacement, type ParsedPassage } from "@/lib/passage";
+import { parseReferenceInput } from "@/lib/passage";
 import type { ChatSummary, Me } from "@/lib/types";
 
 export default function TextComposer({
@@ -21,7 +21,6 @@ export default function TextComposer({
   const [supabase] = useState(() => createClient());
   const [text, setText] = useState("");
   const [reference, setReference] = useState<string | null>(null);
-  const [passage, setPassage] = useState<ParsedPassage | null>(null);
   const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,42 +34,32 @@ export default function TextComposer({
     });
   }
 
-  async function parse() {
-    if (!text.trim()) return;
-    try {
-      const res = await fetch("/api/passages/parse", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      if (res.ok) {
-        const p = (await res.json()) as ParsedPassage;
-        if (p.reference) {
-          setPassage(p);
-          setReference(p.reference);
-        }
-      }
-    } catch {}
-  }
-
   async function send() {
     if (!text.trim()) return;
+    // The reference comes only from the reference field — the note body is
+    // never parsed (and never leaves the device except as the note itself).
+    const checked = parseReferenceInput(reference ?? "");
+    if (!checked.ok) {
+      setError(checked.error);
+      return;
+    }
+    const passage = checked.passage;
+    setReference(passage.reference); // show the normalized form
     setSending(true);
     setError(null);
     try {
-      const note = applyReferenceReplacement(text, passage);
       const { data: inserted, error: insErr } = await supabase
         .from("messages")
         .insert({
           user_id: me.id,
-          note,
+          note: text,
           voice_path: null,
           transcript: null,
-          reference,
-          book: passage?.book ?? null,
-          chapter: passage?.chapter ?? null,
-          verse_start: passage?.verse_start ?? null,
-          verse_end: passage?.verse_end ?? null,
+          reference: passage.reference,
+          book: passage.book,
+          chapter: passage.chapter,
+          verse_start: passage.verse_start,
+          verse_end: passage.verse_end,
           created_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
         })
         .select("id")
@@ -125,7 +114,7 @@ export default function TextComposer({
               value={reference ?? ""}
               onChange={(e) => {
                 setReference(e.target.value);
-                setPassage(null);
+                setError(null);
               }}
               placeholder="Passage Reference"
               className="min-w-0 flex-1 bg-transparent text-left text-sm font-semibold text-zinc-100 placeholder:text-zinc-500 outline-none"
@@ -134,7 +123,6 @@ export default function TextComposer({
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onBlur={parse}
             placeholder="Your thoughts..."
             rows={4}
             className="mt-2 w-full resize-none bg-transparent text-[15px] text-zinc-100 placeholder:text-zinc-500 outline-none"
