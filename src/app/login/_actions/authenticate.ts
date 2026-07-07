@@ -10,10 +10,10 @@ import {
   serializeProfileCookie,
 } from "@/lib/auth/profile-cookie";
 
-async function setProfileCookie(id: string, name: string) {
+async function setProfileCookie(id: string, name: string, planId: string | null) {
   (await cookies()).set(
     PROFILE_COOKIE,
-    serializeProfileCookie({ id, name }),
+    serializeProfileCookie({ id, name, planId }),
     profileCookieOptions,
   );
 }
@@ -52,11 +52,15 @@ export async function authenticate(formData: FormData) {
     if (signIn.data.user) {
       const { data: profile } = await supabase
         .from("profiles")
-        .select("display_name")
+        .select("display_name, reading_plan_id")
         .eq("id", signIn.data.user.id)
         .maybeSingle();
       if (profile?.display_name) {
-        await setProfileCookie(signIn.data.user.id, profile.display_name);
+        await setProfileCookie(
+          signIn.data.user.id,
+          profile.display_name,
+          profile.reading_plan_id ?? null,
+        );
       }
     }
     redirect(next);
@@ -85,7 +89,7 @@ export async function authenticate(formData: FormData) {
         { id: signUp.data.user.id, username, display_name: username },
         { onConflict: "id" },
       );
-    await setProfileCookie(signUp.data.user.id, username);
+    await setProfileCookie(signUp.data.user.id, username, null);
   }
 
   // If email confirmation is enabled, signUp returns no session — surface that clearly.

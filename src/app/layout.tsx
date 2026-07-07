@@ -21,7 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full dark">
-      <body className="h-full bg-zinc-900 text-zinc-100 antialiased overscroll-none">
+      <body className="h-full bg-neutral-900 text-neutral-100 antialiased overscroll-none">
         {children}
       </body>
     </html>

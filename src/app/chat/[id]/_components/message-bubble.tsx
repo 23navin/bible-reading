@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/db/client";
 import type { Message } from "@/lib/types";
 import LocalTime from "@/components/local-time";
+import { bibleComUrlForReference } from "@/lib/reading-plan";
 
 type Props = {
   message: Message;
@@ -156,6 +157,7 @@ export default function MessageBubble({
   };
 
   const reference = message.reference;
+  const referenceHref = reference ? bibleComUrlForReference(reference) : null;
   const body = message.transcript ?? message.note;
   const hasAudio = Boolean(message.voice_signed_url);
   const authorName = message.profile?.display_name ?? "Someone";
@@ -163,12 +165,12 @@ export default function MessageBubble({
   return (
     <div className={`flex flex-col ${isMine ? "items-end" : "items-start"}`}>
       <div className={`mb-0.5 flex items-baseline gap-1 px-4 text-sm ${isMine ? "flex-row-reverse" : ""}`}>
-        {!isMine ? <span className="text-stone-200">{authorName}</span> : null}
+        {!isMine ? <span className="text-neutral-200">{authorName}</span> : null}
         <LocalTime
           iso={message.created_at}
           timeZone={message.created_tz}
           options={{ hour: "numeric", minute: "2-digit" }}
-          className="text-stone-400"
+          className="text-neutral-400"
         />
       </div>
 
@@ -191,12 +193,12 @@ export default function MessageBubble({
             transition: isSwiping ? "none" : "transform 0.2s ease-out",
           }}
           className={`relative max-w-[78%] select-none rounded-2xl px-4 py-2.5 ${
-            isMine ? "bg-blue-500 text-white" : "bg-stone-200 text-stone-900"
+            isMine ? "bg-blue-500 text-white" : "bg-neutral-200 text-neutral-900"
           }`}
         >
           <span
             aria-hidden
-            className="pointer-events-none absolute top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-stone-100 text-stone-500"
+            className="pointer-events-none absolute top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-neutral-100 text-neutral-500"
             style={{
               left: "-40px",
               opacity: Math.min(1, swipeOffset / SWIPE_THRESHOLD),
@@ -228,7 +230,7 @@ export default function MessageBubble({
                     <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
                   </svg>
                   {heartCount > 1 ? (
-                    <span className="font-medium text-stone-600">{heartCount}</span>
+                    <span className="font-medium text-neutral-600">{heartCount}</span>
                   ) : null}
                 </div>
               ) : null}
@@ -248,12 +250,12 @@ export default function MessageBubble({
                   <svg
                     viewBox="0 0 24 24"
                     fill="currentColor"
-                    className="h-3 w-3 text-stone-500"
+                    className="h-3 w-3 text-neutral-500"
                     aria-hidden
                   >
                     <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" />
                   </svg>
-                  <span className="font-medium text-stone-600">{replyCount}</span>
+                  <span className="font-medium text-neutral-600">{replyCount}</span>
                 </button>
               ) : null}
             </div>
@@ -267,7 +269,7 @@ export default function MessageBubble({
                   className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full active:scale-95 ${
                     isMine
                       ? "bg-white/20 text-white"
-                      : "bg-stone-300/70 text-stone-700"
+                      : "bg-neutral-300/70 text-neutral-700"
                   }`}
                 >
                   {isPlaying ? (
@@ -285,20 +287,36 @@ export default function MessageBubble({
                 <span
                   aria-hidden
                   className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-serif text-base italic ${
-                    isMine ? "bg-white/20 text-white" : "bg-stone-300/70 text-stone-700"
+                    isMine ? "bg-white/20 text-white" : "bg-neutral-300/70 text-neutral-700"
                   }`}
                 >
                   t
                 </span>
               )}
               {reference ? (
-                <div
-                  className={`text-sm font-semibold ${
-                    isMine ? "text-white" : "text-stone-900"
-                  }`}
-                >
-                  {reference}
-                </div>
+                referenceHref ? (
+                  <a
+                    href={referenceHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className={`text-sm font-semibold ${
+                      isMine
+                        ? "text-white active:text-white/70"
+                        : "text-neutral-900 active:text-neutral-500"
+                    }`}
+                  >
+                    {reference}
+                  </a>
+                ) : (
+                  <div
+                    className={`text-sm font-semibold ${
+                      isMine ? "text-white" : "text-neutral-900"
+                    }`}
+                  >
+                    {reference}
+                  </div>
+                )
               ) : null}
             </div>
           ) : null}
@@ -323,9 +341,9 @@ export default function MessageBubble({
           {replies.map((r) => (
             <div
               key={r.id}
-              className="max-w-[70%] rounded-xl bg-white px-3 py-1.5 text-sm text-stone-700 shadow-sm"
+              className="max-w-[70%] rounded-xl bg-white px-3 py-1.5 text-sm text-neutral-700 shadow-sm"
             >
-              <span className="mr-1 font-medium text-stone-500">
+              <span className="mr-1 font-medium text-neutral-500">
                 {r.profile?.display_name ?? "Someone"}:
               </span>
               {r.body_text}

@@ -76,17 +76,37 @@ export function CookieAvatar({
 
 // Keeps the cookie in sync with the database value once a page has fetched
 // it — this is what backfills sessions that predate the cookie (login sets
-// it for new sessions). Renders nothing.
-export function ProfileCookieSync({ id, name }: { id: string; name: string | null }) {
+// it for new sessions). Renders nothing. planId is tri-state: string/null
+// sync it, undefined means this page didn't fetch it — preserve what's there.
+export function ProfileCookieSync({
+  id,
+  name,
+  planId,
+}: {
+  id: string;
+  name: string | null;
+  planId?: string | null;
+}) {
   useEffect(() => {
     if (!name) return;
     const current = getSnapshot();
-    if (current && current.id === id && current.name === name) return;
+    const nextPlanId = planId === undefined ? current?.planId : planId;
+    if (
+      current &&
+      current.id === id &&
+      current.name === name &&
+      current.planId === nextPlanId
+    ) {
+      return;
+    }
+    const next = serializeProfileCookie(
+      nextPlanId === undefined ? { id, name } : { id, name, planId: nextPlanId },
+    );
     const { sameSite, secure, path, maxAge } = profileCookieOptions;
     document.cookie =
-      `${PROFILE_COOKIE}=${encodeURIComponent(serializeProfileCookie({ id, name }))}; ` +
+      `${PROFILE_COOKIE}=${encodeURIComponent(next)}; ` +
       `path=${path}; max-age=${maxAge}; samesite=${sameSite}` +
       (secure ? "; secure" : "");
-  }, [id, name]);
+  }, [id, name, planId]);
   return null;
 }

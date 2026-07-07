@@ -266,7 +266,7 @@ export default function HomeView({
   const overlayActive = mode === "review" || mode === "text" || exiting;
 
   return (
-    <Shell className="bg-zinc-900 text-zinc-100">
+    <Shell className="bg-neutral-900 text-neutral-100">
       <Header className="relative flex items-center justify-between px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
         {recording ? (
           <>
@@ -275,9 +275,9 @@ export default function HomeView({
               type="button"
               onClick={closeOverlay}
               aria-label="Cancel recording"
-              className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-2 active:bg-zinc-800"
+              className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-2 active:bg-neutral-800"
             >
-              <CloseIcon className="h-6 w-6 text-zinc-300" />
+              <CloseIcon className="h-6 w-6 text-neutral-300" />
             </button>
           </>
         ) : (
@@ -289,7 +289,7 @@ export default function HomeView({
               href="/archive"
               aria-label="Open your archive"
               style={{ borderRadius: 8 }}
-              className="ring-1 ring-zinc-700 active:ring-zinc-500"
+              className="ring-1 ring-neutral-700 active:ring-neutral-500"
             >
               <Avatar name={displayName} id={me.id} size={40} />
             </Link>
@@ -300,7 +300,7 @@ export default function HomeView({
       <Body className="px-8">
         {recording ? (
           <div className="screen-fade-in flex h-full items-center justify-center">
-            <p className="text-center italic text-md text-zinc-600">
+            <p className="text-center italic text-md text-neutral-600">
               {stopping
                 ? "finishing up…"
                 : recordingReady
@@ -318,16 +318,16 @@ export default function HomeView({
               <li key={c.id}>
                 <Link
                   href={`/chat/${c.id}`}
-                  className="relative flex items-center gap-3 rounded-md py-2 active:bg-zinc-800"
+                  className="relative flex items-center gap-3 rounded-md py-2 active:bg-neutral-800"
                 >
                   <UnreadDot
                     active={c.hasUnread}
                     className="absolute -left-4 top-1/2 -translate-y-1/2"
                   />
-                  <span className="text-lg text-zinc-100">{c.name}</span>
+                  <span className="text-lg text-neutral-100">{c.name}</span>
                   <AvatarStack members={c.members} />
                   {c.lastMessageAt ? (
-                    <span className="ml-auto shrink-0 text-sm tabular-nums text-zinc-500">
+                    <span className="ml-auto shrink-0 text-sm tabular-nums text-neutral-500">
                       {hydrated ? formatChatTimestamp(c.lastMessageAt) : null}
                     </span>
                   ) : null}
@@ -358,12 +358,12 @@ export default function HomeView({
                       if (next && e.currentTarget.form?.contains(next)) return;
                       if (!e.currentTarget.value.trim()) setCreatingChat(false);
                     }}
-                    className="min-w-0 flex-1 border-0 bg-transparent p-0 text-lg text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-0"
+                    className="min-w-0 flex-1 border-0 bg-transparent p-0 text-lg text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-0"
                   />
                   <button
                     type="submit"
                     onMouseDown={(e) => e.preventDefault()}
-                    className="shrink-0 text-lg text-zinc-100 active:text-zinc-500"
+                    className="shrink-0 text-lg text-neutral-100 active:text-neutral-500"
                   >
                     create
                   </button>
@@ -372,7 +372,7 @@ export default function HomeView({
                 <button
                   type="button"
                   onClick={() => setCreatingChat(true)}
-                  className="flex w-full items-center rounded-md py-2 text-left text-zinc-400 active:bg-zinc-800"
+                  className="flex w-full items-center rounded-md py-2 text-left text-neutral-400 active:bg-neutral-800"
                 >
                   <span className="text-lg">new chat</span>
                 </button>
@@ -384,7 +384,7 @@ export default function HomeView({
 
       {mode === "idle" || recording || exiting ? (
         <Footer className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
-          <div className="mb-2 flex min-h-5 justify-center text-sm text-zinc-400">
+          <div className="mb-2 flex min-h-5 justify-center text-sm text-neutral-400">
             {recording ? (
               <p aria-hidden={!recordingReady} className="text-center tabular-nums">
                 {recordingReady ? formatElapsed(elapsedMs) : " "}
@@ -417,8 +417,8 @@ export default function HomeView({
               aria-label="Type a log"
               aria-hidden={recording}
               style={{ willChange: "width, margin, opacity" }}
-              className={`flex h-20 items-center justify-center overflow-hidden rounded-md border border-dashed bg-transparent text-zinc-300 transition-[width,margin,opacity,border-color] duration-300 ease-out ${
-                recording ? "ml-0 w-0 border-transparent opacity-0" : "ml-3 w-20 border-zinc-400 opacity-100"
+              className={`flex h-20 items-center justify-center overflow-hidden rounded-md border border-dashed bg-transparent text-neutral-300 transition-[width,margin,opacity,border-color] duration-300 ease-out ${
+                recording ? "ml-0 w-0 border-transparent opacity-0" : "ml-3 w-20 border-neutral-400 opacity-100"
               }`}
             >
               <KeyboardIcon className="h-7 w-7 shrink-0" />
@@ -462,12 +462,12 @@ function NextReadingPrompt({ reading }: { reading: NextReading | null }) {
           href={reading.href}
           target="_blank"
           rel="noopener noreferrer"
-          className="font-semibold text-zinc-100 underline decoration-zinc-500 underline-offset-4 active:text-zinc-400"
+          className="font-semibold text-neutral-100 decoration-neutral-500 underline-offset-4 active:text-neutral-400"
         >
           {reading.passage}
         </a>
       ) : (
-        <span className="font-semibold text-zinc-100">{reading.passage}</span>
+        <span className="font-semibold text-neutral-100">{reading.passage}</span>
       )}
     </p>
   );

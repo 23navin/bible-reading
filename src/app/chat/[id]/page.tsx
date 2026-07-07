@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/db/server";
+import { getAuthUser } from "@/lib/auth/user";
 import { signAudioPaths } from "@/lib/audio/storage";
 import type { Member, Message } from "@/lib/types";
 import ChatView from "./_components/chat-view";
@@ -15,9 +16,7 @@ export default async function ChatRoutePage({
   const { id: chatId } = await params;
   const supabase = await createServerSupabase();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser(supabase);
   if (!user) redirect("/login");
 
   // Share-link flow: idempotently self-join (if not already a member) and
@@ -34,7 +33,7 @@ export default async function ChatRoutePage({
   if (!chat) {
     return (
       <main className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-        <p className="text-base text-stone-500">Chat not found.</p>
+        <p className="text-base text-neutral-500">Chat not found.</p>
         <Link href="/" className="text-sm font-medium text-blue-500">
           Back home
         </Link>

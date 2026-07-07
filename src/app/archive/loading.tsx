@@ -1,14 +1,11 @@
 import { CookieDisplayName } from "@/components/profile-cookie";
-import {
-  ArchiveFrame,
-  NameSkeleton,
-  ArchiveListSkeleton,
-} from "./_components/archive-frame";
+import { ProfileFrame, NameSkeleton } from "@/components/profile-frame";
+import { ArchiveListSkeleton } from "./_components/archive-skeleton";
 
 export default function ArchiveLoading() {
   return (
-    <ArchiveFrame name={<CookieDisplayName fallback={<NameSkeleton />} />}>
+    <ProfileFrame tab="log" name={<CookieDisplayName fallback={<NameSkeleton />} />}>
       <ArchiveListSkeleton />
-    </ArchiveFrame>
+    </ProfileFrame>
   );
 }

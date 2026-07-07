@@ -191,16 +191,16 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
 
   return (
     <Shell>
-      <Header className="flex items-center bg-zinc-900 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2">
+      <Header className="flex items-center bg-neutral-900 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2">
         <Link
           href="/"
           aria-label="Home"
-          className="-m-2 flex h-10 w-10 items-center justify-center text-zinc-300 active:text-zinc-100"
+          className="-m-2 flex h-10 w-10 items-center justify-center text-neutral-300 active:text-neutral-100"
         >
           <ChevronLeftIcon className="h-6 w-6" />
         </Link>
         <div className="flex flex-1 items-center justify-center gap-2">
-          <span className="truncate text-base font-medium text-zinc-100">
+          <span className="truncate text-base font-medium text-neutral-100">
             {chatName}
           </span>
           {members.length > 0 ? <AvatarStack members={members} /> : null}
@@ -211,7 +211,7 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
       <Body ref={scrollRef} className="px-3 py-4">
         <div className="flex flex-col gap-3">
           {messages.length === 0 ? (
-            <p className="mt-12 text-center text-sm text-stone-400">
+            <p className="mt-12 text-center text-sm text-neutral-400">
               No messages here yet. Share something from your archive or record below.
             </p>
           ) : (
@@ -223,7 +223,7 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
                 <div key={m.id} className="flex flex-col gap-3">
                   {showDivider && (
                     <div className="flex justify-center py-1">
-                      <span className="text-sm text-stone-400">
+                      <span className="text-sm text-neutral-400">
                         {formatDateDivider(m.created_at)}
                       </span>
                     </div>

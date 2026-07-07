@@ -24,7 +24,7 @@ export function DiscardButton({ onDiscard }: { onDiscard: () => void }) {
       className={`flex h-10 shrink-0 items-center justify-center border transition-all duration-200 ease-out ${
         confirming
           ? "w-24 border-red-500 bg-red-500 text-white"
-          : "w-10 border-zinc-700 bg-zinc-800 text-zinc-300 active:bg-zinc-700"
+          : "w-10 border-neutral-700 bg-neutral-800 text-neutral-300 active:bg-neutral-700"
       }`}
     >
       {confirming ? (
