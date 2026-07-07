@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Shell, Header, Body } from "@/components/shell";
-import { CloseIcon, GearIcon } from "@/components/icons";
+import { CloseIcon } from "@/components/icons";
 
 // Shared page chrome so the real page and loading.tsx render identical
 // frames — the Suspense swap only touches the name and the list.
@@ -17,25 +17,32 @@ export function ArchiveFrame({
         <h1 className="text-2xl font-semibold tracking-tight">
           <span className="text-white">{name}</span>&apos;s personal log
         </h1>
-        <div className="flex shrink-0 items-center">
-          <Link
-            href="/settings"
-            aria-label="Open settings"
-            className="flex h-10 w-10 items-center justify-center rounded-full active:bg-zinc-800"
-          >
-            <GearIcon className="h-6 w-6 text-zinc-300" />
-          </Link>
-          <Link
-            href="/"
-            aria-label="Close archive"
-            className="flex h-10 w-10 items-center justify-center rounded-full active:bg-zinc-800"
-          >
-            <CloseIcon className="h-6 w-6 text-zinc-300" />
-          </Link>
-        </div>
+        <Link
+          href="/"
+          aria-label="Close archive"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full active:bg-zinc-800"
+        >
+          <CloseIcon className="h-6 w-6 text-zinc-300" />
+        </Link>
       </Header>
 
-      <Body className="px-3 py-4">{children}</Body>
+      <Body className="pb-4">
+        <nav className="mb-3 flex items-center gap-6 bg-zinc-950 px-8 py-2">
+          <Link
+            href="/settings/account"
+            className="text-sm font-medium text-zinc-400 active:text-white"
+          >
+            manage account
+          </Link>
+          <Link
+            href="/settings/plan"
+            className="text-sm font-medium text-zinc-400 active:text-white"
+          >
+            reading plan
+          </Link>
+        </nav>
+        <div className="px-3">{children}</div>
+      </Body>
     </Shell>
   );
 }

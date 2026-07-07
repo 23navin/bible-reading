@@ -3,15 +3,14 @@ import { redirect } from "next/navigation";
 import { Shell, Header, Body } from "@/components/shell";
 import { CheckIcon, CloseIcon } from "@/components/icons";
 import { createServerSupabase } from "@/lib/db/server";
-import { signOut } from "@/app/login/_actions/authenticate";
 import type { ReadingPlan } from "@/lib/reading-plan";
-import { setReadingPlan } from "./_actions/set-reading-plan";
+import { setReadingPlan } from "../_actions/set-reading-plan";
 
 export const dynamic = "force-dynamic";
 
 type PlanRow = ReadingPlan & { reading_plan_entries: { count: number }[] };
 
-export default async function SettingsPage() {
+export default async function ReadingPlanPage() {
   const supabase = await createServerSupabase();
   const {
     data: { user },
@@ -37,50 +36,31 @@ export default async function SettingsPage() {
     <Shell className="bg-zinc-900 text-zinc-100">
       <Header className="flex items-center justify-between px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
         <h1 className="text-2xl font-semibold tracking-tight text-white">
-          Settings
+          Reading plan
         </h1>
         <Link
           href="/archive"
-          aria-label="Close settings"
+          aria-label="Close reading plan"
           className="flex h-10 w-10 items-center justify-center rounded-full active:bg-zinc-800"
         >
           <CloseIcon className="h-6 w-6 text-zinc-300" />
         </Link>
       </Header>
 
-      <Body className="flex flex-col gap-8 px-8 py-4">
-        <section>
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500">
-            Reading plan
-          </h2>
-          <form action={setReadingPlan} className="flex flex-col gap-1">
-            <PlanOption id="" name="No plan" selected={selectedId === null} />
-            {plans.map((plan) => (
-              <PlanOption
-                key={plan.id}
-                id={plan.id}
-                name={plan.display_name}
-                detail={`${plan.reading_plan_entries[0]?.count ?? 0} days`}
-                description={plan.description}
-                selected={selectedId === plan.id}
-              />
-            ))}
-          </form>
-        </section>
-
-        <section>
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-zinc-500">
-            Account
-          </h2>
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="w-full rounded-md bg-zinc-800 px-4 py-3 text-base font-semibold text-red-400 active:bg-zinc-700"
-            >
-              Log out
-            </button>
-          </form>
-        </section>
+      <Body className="px-8 py-4">
+        <form action={setReadingPlan} className="flex flex-col gap-1">
+          <PlanOption id="" name="No plan" selected={selectedId === null} />
+          {plans.map((plan) => (
+            <PlanOption
+              key={plan.id}
+              id={plan.id}
+              name={plan.display_name}
+              detail={`${plan.reading_plan_entries[0]?.count ?? 0} days`}
+              description={plan.description}
+              selected={selectedId === plan.id}
+            />
+          ))}
+        </form>
       </Body>
     </Shell>
   );

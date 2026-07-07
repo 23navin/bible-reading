@@ -18,6 +18,6 @@ export async function setReadingPlan(formData: FormData) {
     .update({ reading_plan_id: id || null })
     .eq("id", user.id);
 
-  revalidatePath("/settings");
+  revalidatePath("/settings/plan");
   revalidatePath("/");
 }
