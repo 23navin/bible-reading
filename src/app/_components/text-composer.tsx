@@ -90,7 +90,7 @@ export default function TextComposer({
 
   return (
     <div
-      className={`absolute inset-0 z-30 flex flex-col bg-zinc-900 text-zinc-100 ${
+      className={`absolute inset-0 z-30 flex flex-col bg-neutral-900 text-neutral-100 ${
         exiting ? "screen-fade-out" : "screen-fade-in"
       }`}
     >
@@ -99,7 +99,7 @@ export default function TextComposer({
       </header>
 
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 pb-4">
-        <div className="rounded-2xl bg-zinc-800 px-4 py-2.5">
+        <div className="rounded-2xl bg-neutral-800 px-4 py-2.5">
           <div className="flex items-center gap-3">
             <span
               aria-hidden
@@ -117,7 +117,7 @@ export default function TextComposer({
                 setError(null);
               }}
               placeholder="Passage Reference"
-              className="min-w-0 flex-1 bg-transparent text-left text-sm font-semibold text-zinc-100 placeholder:text-zinc-500 outline-none"
+              className="min-w-0 flex-1 bg-transparent text-left text-sm font-semibold text-neutral-100 placeholder:text-neutral-500 outline-none"
             />
           </div>
           <textarea
@@ -125,7 +125,7 @@ export default function TextComposer({
             onChange={(e) => setText(e.target.value)}
             placeholder="Your thoughts..."
             rows={4}
-            className="mt-2 w-full resize-none bg-transparent text-[15px] text-zinc-100 placeholder:text-zinc-500 outline-none"
+            className="mt-2 w-full resize-none bg-transparent text-[15px] text-neutral-100 placeholder:text-neutral-500 outline-none"
           />
         </div>
 
@@ -141,7 +141,7 @@ export default function TextComposer({
           <button
             onClick={send}
             disabled={sending || !text.trim()}
-            className="flex h-20 w-full items-center justify-center rounded-md bg-zinc-300 font-semibold text-zinc-800 active:bg-blue-500/10 disabled:opacity-50"
+            className="flex h-20 w-full items-center justify-center rounded-md bg-neutral-300 font-semibold text-neutral-800 active:bg-blue-500/10 disabled:opacity-50"
           >
             {sending ? "Logging…" : "Log Reading"}
           </button>

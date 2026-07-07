@@ -27,7 +27,7 @@ export function ProfileFrame({
 }) {
   const current = TABS.find((t) => t.id === tab)!;
   return (
-    <Shell className="bg-zinc-900 text-zinc-100">
+    <Shell className="bg-neutral-900 text-neutral-100">
       <Header className="flex items-center justify-between px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
         <h1 className="text-2xl font-semibold tracking-tight">
           <span className="text-white">{name}</span>&apos;s {current.title}
@@ -35,9 +35,9 @@ export function ProfileFrame({
         <Link
           href="/"
           aria-label={`Close ${current.title}`}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full active:bg-zinc-800"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full active:bg-neutral-800"
         >
-          <CloseIcon className="h-6 w-6 text-zinc-300" />
+          <CloseIcon className="h-6 w-6 text-neutral-300" />
         </Link>
       </Header>
 
@@ -47,7 +47,7 @@ export function ProfileFrame({
             <Link
               key={t.id}
               href={t.href}
-              className="text-sm font-medium text-zinc-400 active:text-white"
+              className="text-sm font-medium text-neutral-400 active:text-white"
             >
               {t.label}
             </Link>
@@ -63,7 +63,7 @@ export function NameSkeleton() {
   return (
     <span
       aria-hidden
-      className="inline-block h-[1em] w-24 translate-y-[0.08em] animate-pulse rounded-md bg-zinc-700"
+      className="inline-block h-[1em] w-24 translate-y-[0.08em] animate-pulse rounded-md bg-neutral-700"
     />
   );
 }

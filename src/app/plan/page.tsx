@@ -250,7 +250,7 @@ function EntryCard({
 
   if (!log) {
     return (
-      <div className="rounded-2xl bg-zinc-800/40 px-4 py-2.5">
+      <div className="rounded-2xl bg-neutral-800/40 px-4 py-2.5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             {href ? (
@@ -258,20 +258,20 @@ function EntryCard({
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm font-semibold text-zinc-400 active:text-zinc-500"
+                className="text-sm font-semibold text-neutral-400 active:text-neutral-500"
               >
                 {passage}
               </a>
             ) : (
-              <span className="text-sm font-semibold text-zinc-400">
+              <span className="text-sm font-semibold text-neutral-400">
                 {passage}
               </span>
             )}
             {completedAt ? (
-              <CheckIcon className="h-4 w-4 shrink-0 text-zinc-400" />
+              <CheckIcon className="h-4 w-4 shrink-0 text-neutral-400" />
             ) : null}
           </div>
-          <span className="shrink-0 text-xs text-zinc-500">{dateLabel}</span>
+          <span className="shrink-0 text-xs text-neutral-500">{dateLabel}</span>
         </div>
       </div>
     );
@@ -279,7 +279,7 @@ function EntryCard({
 
   const body = log.transcript ?? log.note;
   return (
-    <div className="rounded-2xl bg-zinc-800 px-4 py-2.5 text-white">
+    <div className="rounded-2xl bg-neutral-800 px-4 py-2.5 text-white">
       <div className="flex items-center gap-3">
         {log.voice_path ? (
           <ArchiveAudioButton path={log.voice_path} />
@@ -338,18 +338,18 @@ function PlanOption({
       type="submit"
       name="plan"
       value={id}
-      className="flex flex-col gap-1 rounded-md py-2 text-left active:bg-zinc-800"
+      className="flex flex-col gap-1 rounded-md py-2 text-left active:bg-neutral-800"
     >
       <span className="flex w-full items-center justify-between gap-3">
         <span className="flex min-w-0 items-baseline gap-2">
-          <span className="text-lg text-zinc-100">{name}</span>
+          <span className="text-lg text-neutral-100">{name}</span>
         </span>
         {selected ? (
-          <CheckIcon className="h-5 w-5 shrink-0 text-zinc-100" />
+          <CheckIcon className="h-5 w-5 shrink-0 text-neutral-100" />
         ) : null}
       </span>
       {selected && description ? (
-        <span className="text-sm leading-snug text-zinc-400">{description}</span>
+        <span className="text-sm leading-snug text-neutral-400">{description}</span>
       ) : null}
     </button>
   );

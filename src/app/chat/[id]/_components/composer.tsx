@@ -266,26 +266,26 @@ export default function Composer({
   return (
     <div className="px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       {/* {replyTarget ? (
-        <div className="mb-2 flex items-center gap-2 rounded-xl bg-stone-100 px-3 py-1.5 text-xs">
+        <div className="mb-2 flex items-center gap-2 rounded-xl bg-neutral-100 px-3 py-1.5 text-xs">
           <svg
             viewBox="0 0 24 24"
             fill="currentColor"
-            className="h-3.5 w-3.5 shrink-0 text-stone-500"
+            className="h-3.5 w-3.5 shrink-0 text-neutral-500"
             aria-hidden
           >
             <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" />
           </svg>
           <div className="min-w-0 flex-1">
-            <div className="text-stone-500">Replying to {replyAuthor}</div>
+            <div className="text-neutral-500">Replying to {replyAuthor}</div>
             {replyPreview ? (
-              <div className="truncate text-stone-700">{replyPreview}</div>
+              <div className="truncate text-neutral-700">{replyPreview}</div>
             ) : null}
           </div>
           <button
             type="button"
             onClick={onClearReplyTarget}
             aria-label="Cancel reply"
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-stone-500 active:bg-stone-200"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-neutral-500 active:bg-neutral-200"
           >
             ✕
           </button>
@@ -299,7 +299,7 @@ export default function Composer({
             onClick={recording ? stopRecording : startRecording}
             disabled={busy}
             aria-label={recording ? "Stop recording" : "Record voice"}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-stone-200 transition-transform duration-150 active:scale-95 disabled:opacity-50"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-200 transition-transform duration-150 active:scale-95 disabled:opacity-50"
           >
             <span
               style={{ willChange: "transform, border-radius" }}
@@ -324,7 +324,7 @@ export default function Composer({
           }
           rows={1}
           disabled={recording || busy}
-          className="max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-stone-200 bg-stone-50 px-4 py-2 text-[15px] text-stone-900 outline-none focus:border-stone-400 disabled:opacity-60"
+          className="max-h-32 min-h-[40px] flex-1 resize-none rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-2 text-[15px] text-neutral-900 outline-none focus:border-neutral-400 disabled:opacity-60"
         />
 
         <button

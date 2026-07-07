@@ -6,16 +6,16 @@ import { Shell, Header, Body, Footer } from "@/components/shell";
 export default function ChatLoading() {
   return (
     <Shell>
-      <Header className="flex items-center bg-zinc-900 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2">
+      <Header className="flex items-center bg-neutral-900 px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2">
         <Link
           href="/"
           aria-label="Home"
-          className="-m-2 flex h-10 w-10 items-center justify-center text-zinc-300 active:text-zinc-100"
+          className="-m-2 flex h-10 w-10 items-center justify-center text-neutral-300 active:text-neutral-100"
         >
           <ChevronLeftIcon className="h-6 w-6" />
         </Link>
         <div className="flex flex-1 items-center justify-center gap-2">
-          <span aria-hidden className="h-4 w-28 animate-pulse rounded bg-zinc-700" />
+          <span aria-hidden className="h-4 w-28 animate-pulse rounded bg-neutral-700" />
         </div>
         <span aria-hidden className="h-10 w-10" />
       </Header>
@@ -24,7 +24,7 @@ export default function ChatLoading() {
         <div aria-hidden className="flex animate-pulse flex-col gap-3">
           {/* date divider */}
           <div className="flex justify-center py-1">
-            <span className="my-[3px] h-3.5 w-20 rounded bg-zinc-800" />
+            <span className="my-[3px] h-3.5 w-20 rounded bg-neutral-800" />
           </div>
           <BubbleSkeleton mine={false} width="w-3/5" lines={2} />
           <BubbleSkeleton mine width="w-2/5" lines={0} />
@@ -36,10 +36,10 @@ export default function ChatLoading() {
       <Footer>
         <div className="px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           <div aria-hidden className="flex items-end gap-2">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-stone-200">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-200">
               <span className="block h-5 w-5 rounded-full bg-red-500" />
             </span>
-            <span className="h-10 min-h-[40px] flex-1 rounded-2xl border border-stone-200 bg-stone-50" />
+            <span className="h-10 min-h-[40px] flex-1 rounded-2xl border border-neutral-200 bg-neutral-50" />
             <span className="h-10 w-10 shrink-0 rounded-full bg-blue-500 opacity-40" />
           </div>
         </div>
@@ -64,12 +64,12 @@ function BubbleSkeleton({
       <div
         className={`mb-0.5 flex items-baseline gap-1 px-4 ${mine ? "flex-row-reverse" : ""}`}
       >
-        {!mine ? <span className="my-[3px] h-3.5 w-16 rounded bg-zinc-800" /> : null}
-        <span className="my-[3px] h-3 w-10 rounded bg-zinc-800/70" />
+        {!mine ? <span className="my-[3px] h-3.5 w-16 rounded bg-neutral-800" /> : null}
+        <span className="my-[3px] h-3 w-10 rounded bg-neutral-800/70" />
       </div>
       <div
         className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${width} ${
-          mine ? "bg-blue-500/25" : "bg-stone-200/15"
+          mine ? "bg-blue-500/25" : "bg-neutral-200/15"
         }`}
       >
         <div className="flex items-center gap-3">

@@ -38,7 +38,7 @@ export function DisplayNameEditor({ initialName }: { initialName: string }) {
       spellCheck={false}
       role="textbox"
       aria-label="Display name"
-      className="text-zinc-100 outline-none underline"
+      className="text-neutral-100 outline-none underline"
       onBlur={commit}
       onKeyDown={(e) => {
         if (e.key === "Enter") {

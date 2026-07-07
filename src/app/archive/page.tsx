@@ -113,7 +113,7 @@ async function ArchiveList({
 
   if (rows.length === 0) {
     return (
-      <p className="mt-12 text-center text-sm text-stone-400">
+      <p className="mt-12 text-center text-sm text-neutral-400">
         No logs yet.
       </p>
     );
@@ -134,7 +134,7 @@ async function ArchiveList({
 
           return (
             <li key={m.id}>
-              <div className="rounded-2xl bg-zinc-800 px-4 py-2.5 text-white">
+              <div className="rounded-2xl bg-neutral-800 px-4 py-2.5 text-white">
                 <div className="flex items-center gap-3">
                   {m.voice_path ? (
                     <ArchiveAudioButton path={m.voice_path} />
@@ -202,7 +202,7 @@ async function ArchiveList({
         <div className="mt-4 pb-4 text-center">
           <Link
             href="/archive?all=1"
-            className="text-sm font-medium text-zinc-400 active:text-white"
+            className="text-sm font-medium text-neutral-400 active:text-white"
           >
             Show all
           </Link>

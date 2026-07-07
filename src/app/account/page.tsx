@@ -27,20 +27,20 @@ export default async function AccountPage() {
     >
       <ProfileCookieSync id={user.id} name={profile?.display_name ?? null} />
       <section>
-        <p className="text-lg text-zinc-100">
+        <p className="text-lg text-neutral-100">
           display name is{" "}
           <DisplayNameEditor initialName={profile?.display_name ?? "Unknown"} />
         </p>
         {/* Auth emails are synthetic username@vercel.user addresses. */}
-        <p className="text-sm text-zinc-500">
-          login as <span className="text-zinc-300">{user.email?.split("@")[0]}</span>
+        <p className="text-sm text-neutral-500">
+          login as <span className="text-neutral-300">{user.email?.split("@")[0]}</span>
         </p>
       </section>
 
       <form action={signOut}>
         <button
           type="submit"
-          className="w-full rounded-md bg-zinc-800 px-4 py-3 text-base font-semibold text-red-400 active:bg-zinc-700"
+          className="w-full rounded-md bg-neutral-800 px-4 py-3 text-base font-semibold text-red-400 active:bg-neutral-700"
         >
           Log out
         </button>

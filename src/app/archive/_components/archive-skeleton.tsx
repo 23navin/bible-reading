@@ -23,17 +23,17 @@ export function ArchiveListSkeleton() {
     <ul aria-hidden className="flex animate-pulse flex-col gap-3">
       {cards.map((card, i) => (
         <li key={i}>
-          <div className="rounded-2xl bg-zinc-800 px-4 py-2.5">
+          <div className="rounded-2xl bg-neutral-800 px-4 py-2.5">
             <div className="flex items-center gap-3">
               <span className="h-8 w-8 shrink-0 rounded-full bg-white/20" />
               <div className="flex flex-1 items-center justify-between gap-3">
-                <span className={`my-[3px] h-3.5 rounded bg-zinc-600 ${card.reference}`} />
-                <span className="my-0.5 h-3 w-24 shrink-0 rounded bg-zinc-700" />
+                <span className={`my-[3px] h-3.5 rounded bg-neutral-600 ${card.reference}`} />
+                <span className="my-0.5 h-3 w-24 shrink-0 rounded bg-neutral-700" />
               </div>
             </div>
             <div className="mt-2 flex flex-col gap-1.5">
               {card.lines.map((width, j) => (
-                <span key={j} className={`h-3.5 rounded bg-zinc-700 ${width}`} />
+                <span key={j} className={`h-3.5 rounded bg-neutral-700 ${width}`} />
               ))}
             </div>
           </div>

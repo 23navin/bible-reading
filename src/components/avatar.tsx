@@ -34,7 +34,7 @@ export function AvatarStack({ members }: { members: Member[] }) {
             zIndex: shown.length - i,
             borderRadius: 8,
           }}
-          className="ring-2 ring-zinc-900"
+          className="ring-2 ring-neutral-900"
         >
           <Avatar name={m.display_name ?? "?"} id={m.id} size={28} />
         </div>
@@ -42,7 +42,7 @@ export function AvatarStack({ members }: { members: Member[] }) {
       {overflow > 0 ? (
         <div
           style={{ marginLeft: -10, zIndex: 0, borderRadius: 8 }}
-          className="flex h-7 w-7 items-center justify-center bg-zinc-700 text-[10px] font-semibold text-zinc-200 ring-2 ring-zinc-900"
+          className="flex h-7 w-7 items-center justify-center bg-neutral-700 text-[10px] font-semibold text-neutral-200 ring-2 ring-neutral-900"
         >
           +{overflow}
         </div>

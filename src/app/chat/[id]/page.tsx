@@ -33,7 +33,7 @@ export default async function ChatRoutePage({
   if (!chat) {
     return (
       <main className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-        <p className="text-base text-stone-500">Chat not found.</p>
+        <p className="text-base text-neutral-500">Chat not found.</p>
         <Link href="/" className="text-sm font-medium text-blue-500">
           Back home
         </Link>
