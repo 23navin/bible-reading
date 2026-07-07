@@ -49,11 +49,39 @@ export function formatEntryPassage(entry: Pick<ReadingPlanEntry, "begin_chapter"
   return `${begin} - ${end}`;
 }
 
+// Translations users can pick (profiles.bible_translation, constrained by a
+// database check) mapped to bible.com version ids.
+export const BIBLE_TRANSLATIONS = ["ESV", "NASB", "NIV", "NKJV", "NLT"] as const;
+export type BibleTranslation = (typeof BIBLE_TRANSLATIONS)[number];
+
+const BIBLE_COM_VERSION_IDS: Record<BibleTranslation, number> = {
+  ESV: 59,
+  NASB: 2692,
+  NIV: 111,
+  NKJV: 114,
+  NLT: 116,
+};
+
+export const DEFAULT_TRANSLATION: BibleTranslation = "ESV";
+
+export function isBibleTranslation(value: unknown): value is BibleTranslation {
+  return BIBLE_TRANSLATIONS.includes(value as BibleTranslation);
+}
+
+// Unknown/missing translations (e.g. a viewer whose profile hasn't loaded)
+// fall back to the default rather than producing a broken link.
+function bibleComVersionId(translation: string | null | undefined): number {
+  return BIBLE_COM_VERSION_IDS[
+    isBibleTranslation(translation) ? translation : DEFAULT_TRANSLATION
+  ];
+}
+
 // bible.com chapter URL for an entry, e.g. https://www.bible.com/bible/59/JHN.1
 // (59 = ESV). Same-chapter verse ranges become JHN.1.1-18.
-const BIBLE_COM_VERSION = 59;
-
-export function bibleComUrl(entry: Pick<ReadingPlanEntry, "begin_chapter" | "end_chapter">): string | null {
+export function bibleComUrl(
+  entry: Pick<ReadingPlanEntry, "begin_chapter" | "end_chapter">,
+  translation?: string | null,
+): string | null {
   const b = parseReference(entry.begin_chapter);
   const e = parseReference(entry.end_chapter);
   const code = USFM_BOOK_CODES[normalizeBook(b.book)];
@@ -66,13 +94,16 @@ export function bibleComUrl(entry: Pick<ReadingPlanEntry, "begin_chapter" | "end
       ref += `-${e.verse}`;
     }
   }
-  return `https://www.bible.com/bible/${BIBLE_COM_VERSION}/${ref}`;
+  return `https://www.bible.com/bible/${bibleComVersionId(translation)}/${ref}`;
 }
 
 // bible.com URL for a stored log reference ("John 3:16-18", "Genesis 1-2",
 // "Jude 5"). Whole books and chapter ranges link to their first chapter.
 // Returns null for anything parseReferenceInput can't recognize.
-export function bibleComUrlForReference(reference: string): string | null {
+export function bibleComUrlForReference(
+  reference: string,
+  translation?: string | null,
+): string | null {
   const checked = parseReferenceInput(reference);
   if (!checked.ok) return null;
   const p = checked.passage;
@@ -84,7 +115,7 @@ export function bibleComUrlForReference(reference: string): string | null {
     ref += `.${p.verse_start}`;
     if (p.verse_end != null) ref += `-${p.verse_end}`;
   }
-  return `https://www.bible.com/bible/${BIBLE_COM_VERSION}/${ref}`;
+  return `https://www.bible.com/bible/${bibleComVersionId(translation)}/${ref}`;
 }
 
 function normalizeBook(book: string): string {

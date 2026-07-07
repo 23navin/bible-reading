@@ -17,6 +17,7 @@ type Props = {
   members: Member[];
   currentUserId: string;
   initialMessages: Message[];
+  translation: string | null;
 };
 
 function formatDateDivider(iso: string): string {
@@ -41,7 +42,7 @@ function dayKey(iso: string): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
-export default function ChatView({ chatId, chatName, members, currentUserId, initialMessages }: Props) {
+export default function ChatView({ chatId, chatName, members, currentUserId, initialMessages, translation }: Props) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [supabase] = useState(() => createClient());
   const [replyTargetId, setReplyTargetId] = useState<string | null>(null);
@@ -234,6 +235,7 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
                     currentUserId={currentUserId}
                     isReplyTarget={m.id === replyTargetId}
                     onToggleReplyTarget={toggleReplyTarget}
+                    translation={translation}
                   />
                 </div>
               );

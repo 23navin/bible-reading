@@ -40,7 +40,7 @@ export default async function HomePage() {
     await Promise.all([
       supabase
         .from("profiles")
-        .select("id, username, display_name, reading_plan_id")
+        .select("id, username, display_name, reading_plan_id, bible_translation")
         .eq("id", user.id)
         .maybeSingle(),
       supabase
@@ -100,7 +100,7 @@ export default async function HomePage() {
       nextReading = {
         date: next.date,
         passage: formatEntryPassage(next),
-        href: bibleComUrl(next),
+        href: bibleComUrl(next, profileRow?.bible_translation),
       };
     }
   }

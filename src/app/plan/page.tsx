@@ -44,6 +44,7 @@ type ProgressRow = {
 type PlanData = {
   user: AuthUser | null;
   displayName: string | null;
+  translation: string | null;
   selectedId: string | null;
   plans: PlanRow[];
   entries: EntryRow[];
@@ -83,6 +84,7 @@ async function loadPlanData(cookiePlanId: string | null | undefined): Promise<Pl
   const empty: PlanData = {
     user: null,
     displayName: null,
+    translation: null,
     selectedId: null,
     plans: [],
     entries: [],
@@ -105,7 +107,7 @@ async function loadPlanData(cookiePlanId: string | null | undefined): Promise<Pl
   const [{ data: profileRow }, { data: planRows }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("reading_plan_id, display_name")
+      .select("reading_plan_id, display_name, bible_translation")
       .eq("id", user.id)
       .maybeSingle(),
     supabase
@@ -135,6 +137,7 @@ async function loadPlanData(cookiePlanId: string | null | undefined): Promise<Pl
   return {
     user,
     displayName: profileRow?.display_name ?? null,
+    translation: profileRow?.bible_translation ?? null,
     selectedId,
     plans: (planRows ?? []) as PlanRow[],
     entries,
@@ -178,6 +181,7 @@ async function PlanContent({ dataPromise }: { dataPromise: Promise<PlanData> }) 
   const {
     user,
     displayName,
+    translation,
     selectedId,
     plans,
     entries,
@@ -211,6 +215,7 @@ async function PlanContent({ dataPromise }: { dataPromise: Promise<PlanData> }) 
                 entry={entry}
                 log={logByDate.get(entry.date) ?? null}
                 completedAt={completedAtByDate.get(entry.date) ?? null}
+                translation={translation}
               />
             </li>
           ))}
@@ -224,10 +229,12 @@ function EntryCard({
   entry,
   log,
   completedAt,
+  translation,
 }: {
   entry: EntryRow;
   log: LogRow | null;
   completedAt: string | null;
+  translation: string | null;
 }) {
   // Completed entries show when they were logged (in the author's timezone
   // when the log recorded one); pending ones show the plan's scheduled date,
@@ -246,7 +253,7 @@ function EntryCard({
     })
   );
   const passage = formatEntryPassage(entry);
-  const href = bibleComUrl(entry);
+  const href = bibleComUrl(entry, translation);
 
   if (!log) {
     return (

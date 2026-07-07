@@ -12,6 +12,7 @@ type Props = {
   currentUserId: string;
   isReplyTarget: boolean;
   onToggleReplyTarget: (id: string) => void;
+  translation: string | null;
 };
 
 const SWIPE_THRESHOLD = 50;
@@ -23,6 +24,7 @@ export default function MessageBubble({
   currentUserId,
   isReplyTarget,
   onToggleReplyTarget,
+  translation,
 }: Props) {
   const supabase = createClient();
   const [isPlaying, setIsPlaying] = useState(false);
@@ -157,7 +159,7 @@ export default function MessageBubble({
   };
 
   const reference = message.reference;
-  const referenceHref = reference ? bibleComUrlForReference(reference) : null;
+  const referenceHref = reference ? bibleComUrlForReference(reference, translation) : null;
   const body = message.transcript ?? message.note;
   const hasAudio = Boolean(message.voice_signed_url);
   const authorName = message.profile?.display_name ?? "Someone";

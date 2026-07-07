@@ -3,7 +3,7 @@ import { Shell, Header, Body } from "@/components/shell";
 import { CloseIcon } from "@/components/icons";
 
 const TABS = [
-  { id: "log", href: "/archive", title: "personal log", label: "personal log" },
+  { id: "log", href: "/archive", title: "personal log", label: "see personal log" },
   { id: "account", href: "/account", title: "account", label: "adjust account" },
   { id: "plan", href: "/plan", title: "reading plan", label: "manage reading plan" },
 ] as const;
@@ -44,7 +44,7 @@ export function ProfileFrame({
       </Header>
 
       <Body flow="document" className="pb-[max(1rem,env(safe-area-inset-bottom))]">
-        <nav className="mb-3 flex items-center gap-6 px-8">
+        <nav className="mb-7 flex items-center gap-6 px-8">
           {TABS.filter((t) => t.id !== tab).map((t) => (
             <Link
               key={t.id}

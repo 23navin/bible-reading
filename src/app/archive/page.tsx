@@ -98,15 +98,23 @@ async function ArchiveList({
 
   // One extra row past the cap tells us whether a "Show all" link is needed.
   const limit = showAll ? ALL_LIMIT : INITIAL_LIMIT;
-  const { data } = await supabase
-    .from("messages")
-    .select(
-      "id, reference, note, voice_path, transcript, created_at, created_tz, message_shares(chat_id, chats(id, name))",
-    )
-    .eq("user_id", user.id)
-    .not("reference", "is", null)
-    .order("created_at", { ascending: false })
-    .limit(limit + 1);
+  const [{ data }, { data: profile }] = await Promise.all([
+    supabase
+      .from("messages")
+      .select(
+        "id, reference, note, voice_path, transcript, created_at, created_tz, message_shares(chat_id, chats(id, name))",
+      )
+      .eq("user_id", user.id)
+      .not("reference", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(limit + 1),
+    supabase
+      .from("profiles")
+      .select("bible_translation")
+      .eq("id", user.id)
+      .maybeSingle(),
+  ]);
+  const translation = profile?.bible_translation ?? null;
 
   const hasMore = (data ?? []).length > limit;
   const rows = ((data ?? []) as Row[]).slice(0, limit);
@@ -129,7 +137,7 @@ async function ArchiveList({
 
           const body = m.transcript ?? m.note;
           const referenceHref = m.reference
-            ? bibleComUrlForReference(m.reference)
+            ? bibleComUrlForReference(m.reference, translation)
             : null;
 
           return (

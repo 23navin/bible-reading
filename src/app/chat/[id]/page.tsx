@@ -43,10 +43,17 @@ export default async function ChatRoutePage({
 
   await supabase.rpc("mark_chat_read", { p_chat_id: chatId });
 
-  const { data: memberRows } = await supabase
-    .from("chat_members")
-    .select("profiles(id, display_name)")
-    .eq("chat_id", chatId);
+  const [{ data: memberRows }, { data: viewerProfile }] = await Promise.all([
+    supabase
+      .from("chat_members")
+      .select("profiles(id, display_name)")
+      .eq("chat_id", chatId),
+    supabase
+      .from("profiles")
+      .select("bible_translation")
+      .eq("id", user.id)
+      .maybeSingle(),
+  ]);
 
   type MemberRow = { profiles: Member | Member[] | null };
   const allMembers: Member[] = (memberRows ?? [])
@@ -100,6 +107,7 @@ export default async function ChatRoutePage({
       members={members}
       currentUserId={user.id}
       initialMessages={messages}
+      translation={viewerProfile?.bible_translation ?? null}
     />
   );
 }
