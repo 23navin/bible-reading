@@ -7,11 +7,8 @@ import { ProfileCookieSync } from "@/components/profile-cookie";
 import { createServerSupabase } from "@/lib/db/server";
 import { signAudioPaths } from "@/lib/audio/storage";
 import ArchiveAudioButton from "./_components/archive-audio-button";
-import {
-  ArchiveFrame,
-  NameSkeleton,
-  ArchiveListSkeleton,
-} from "./_components/archive-frame";
+import { ProfileFrame, NameSkeleton } from "@/components/profile-frame";
+import { ArchiveListSkeleton } from "./_components/archive-skeleton";
 import LocalTime from "@/components/local-time";
 import { bibleComUrlForReference } from "@/lib/reading-plan";
 
@@ -46,7 +43,8 @@ export default async function ArchivePage() {
   const profile = parseProfileCookie((await cookies()).get(PROFILE_COOKIE)?.value);
 
   return (
-    <ArchiveFrame
+    <ProfileFrame
+      tab="log"
       name={
         profile?.name || (
           <Suspense fallback={<NameSkeleton />}>
@@ -58,7 +56,7 @@ export default async function ArchivePage() {
       <Suspense fallback={<ArchiveListSkeleton />}>
         <ArchiveList sessionPromise={sessionPromise} />
       </Suspense>
-    </ArchiveFrame>
+    </ProfileFrame>
   );
 }
 
