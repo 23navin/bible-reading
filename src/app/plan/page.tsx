@@ -15,6 +15,7 @@ import {
   type ReadingPlanEntry,
 } from "@/lib/reading-plan";
 import ArchiveAudioButton from "@/app/archive/_components/archive-audio-button";
+import LocalTime from "@/components/local-time";
 import { PlanSkeleton } from "./_components/plan-skeleton";
 import { setReadingPlan } from "./_actions/set-reading-plan";
 
@@ -31,9 +32,14 @@ type LogRow = {
   voice_path: string | null;
   transcript: string | null;
   created_at: string;
+  created_tz: string | null;
 };
 
-type ProgressRow = { date: string; messages: LogRow | LogRow[] | null };
+type ProgressRow = {
+  date: string;
+  completed_at: string;
+  messages: LogRow | LogRow[] | null;
+};
 
 type PlanData = {
   user: AuthUser | null;
@@ -42,7 +48,7 @@ type PlanData = {
   plans: PlanRow[];
   entries: EntryRow[];
   logByDate: Map<string, LogRow>;
-  doneDates: Set<string>;
+  completedAtByDate: Map<string, string>;
 };
 
 // Days of a plan plus the progress rows (with their completing logs).
@@ -56,7 +62,7 @@ async function fetchPlanDetail(supabase: SupabaseClient, userId: string, planId:
     supabase
       .from("reading_plan_progress")
       .select(
-        "date, messages(id, reference, note, voice_path, transcript, created_at)",
+        "date, completed_at, messages(id, reference, note, voice_path, transcript, created_at, created_tz)",
       )
       .eq("user_id", userId)
       .eq("plan_id", planId),
@@ -81,7 +87,7 @@ async function loadPlanData(cookiePlanId: string | null | undefined): Promise<Pl
     plans: [],
     entries: [],
     logByDate: new Map(),
-    doneDates: new Set(),
+    completedAtByDate: new Map(),
   };
 
   const supabase = await createServerSupabase();
@@ -112,7 +118,7 @@ async function loadPlanData(cookiePlanId: string | null | undefined): Promise<Pl
 
   let entries: EntryRow[] = [];
   const logByDate = new Map<string, LogRow>();
-  const doneDates = new Set<string>();
+  const completedAtByDate = new Map<string, string>();
   if (selectedId) {
     const detail =
       guessPromise && cookiePlanId === selectedId
@@ -120,7 +126,7 @@ async function loadPlanData(cookiePlanId: string | null | undefined): Promise<Pl
         : await fetchPlanDetail(supabase, user.id, selectedId);
     entries = detail.entries;
     for (const p of detail.progress) {
-      doneDates.add(p.date);
+      completedAtByDate.set(p.date, p.completed_at);
       const log = Array.isArray(p.messages) ? p.messages[0] : p.messages;
       if (log) logByDate.set(p.date, log);
     }
@@ -133,7 +139,7 @@ async function loadPlanData(cookiePlanId: string | null | undefined): Promise<Pl
     plans: (planRows ?? []) as PlanRow[],
     entries,
     logByDate,
-    doneDates,
+    completedAtByDate,
   };
 }
 
@@ -169,8 +175,15 @@ async function DisplayName({ dataPromise }: { dataPromise: Promise<PlanData> }) 
 }
 
 async function PlanContent({ dataPromise }: { dataPromise: Promise<PlanData> }) {
-  const { user, displayName, selectedId, plans, entries, logByDate, doneDates } =
-    await dataPromise;
+  const {
+    user,
+    displayName,
+    selectedId,
+    plans,
+    entries,
+    logByDate,
+    completedAtByDate,
+  } = await dataPromise;
   if (!user) redirect("/login");
 
   return (
@@ -197,7 +210,7 @@ async function PlanContent({ dataPromise }: { dataPromise: Promise<PlanData> }) 
               <EntryCard
                 entry={entry}
                 log={logByDate.get(entry.date) ?? null}
-                done={doneDates.has(entry.date)}
+                completedAt={completedAtByDate.get(entry.date) ?? null}
               />
             </li>
           ))}
@@ -210,15 +223,27 @@ async function PlanContent({ dataPromise }: { dataPromise: Promise<PlanData> }) 
 function EntryCard({
   entry,
   log,
-  done,
+  completedAt,
 }: {
   entry: EntryRow;
   log: LogRow | null;
-  done: boolean;
+  completedAt: string | null;
 }) {
-  const dateLabel = new Date(`${entry.date}T00:00:00`).toLocaleDateString(
-    "en-US",
-    { month: "long", day: "numeric" },
+  // Completed entries show when they were logged (in the author's timezone
+  // when the log recorded one); pending ones show the plan's scheduled date,
+  // which is date-only and safe to format on the server.
+  const loggedAt = log?.created_at ?? completedAt;
+  const dateLabel = loggedAt ? (
+    <LocalTime
+      iso={loggedAt}
+      timeZone={log?.created_tz}
+      options={{ month: "long", day: "numeric" }}
+    />
+  ) : (
+    new Date(`${entry.date}T00:00:00`).toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+    })
   );
   const passage = formatEntryPassage(entry);
   const href = bibleComUrl(entry);
@@ -242,7 +267,7 @@ function EntryCard({
                 {passage}
               </span>
             )}
-            {done ? (
+            {completedAt ? (
               <CheckIcon className="h-4 w-4 shrink-0 text-zinc-400" />
             ) : null}
           </div>
