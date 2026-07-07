@@ -13,6 +13,7 @@ import {
   ArchiveListSkeleton,
 } from "./_components/archive-frame";
 import LocalTime from "@/components/local-time";
+import { bibleComUrlForReference } from "@/lib/reading-plan";
 
 export const dynamic = "force-dynamic";
 
@@ -102,7 +103,7 @@ async function ArchiveList({ sessionPromise }: { sessionPromise: Promise<Session
   if (rows.length === 0) {
     return (
       <p className="mt-12 text-center text-sm text-stone-400">
-        No readings yet. Tap the mic on the home screen.
+        No logs yet.
       </p>
     );
   }
@@ -116,6 +117,9 @@ async function ArchiveList({ sessionPromise }: { sessionPromise: Promise<Session
 
         const body = m.transcript ?? m.note;
         const hasAudio = Boolean(m.voice_path && signedUrls[m.voice_path]);
+        const referenceHref = m.reference
+          ? bibleComUrlForReference(m.reference)
+          : null;
 
         return (
           <li key={m.id}>
@@ -135,13 +139,24 @@ async function ArchiveList({ sessionPromise }: { sessionPromise: Promise<Session
                 )}
                 <div className="flex flex-1 items-center justify-between gap-3">
                   <div className="text-sm font-semibold">
-                    {m.reference ?? "Untitled reading"}
+                    {referenceHref ? (
+                      <a
+                        href={referenceHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="active:text-white/70"
+                      >
+                        {m.reference}
+                      </a>
+                    ) : (
+                      (m.reference ?? "Untitled reading")
+                    )}
                   </div>
                   <LocalTime
                     iso={m.created_at}
                     timeZone={m.created_tz}
                     options={{
-                      month: "short",
+                      month: "long",
                       day: "numeric",
                       hour: "numeric",
                       minute: "2-digit",

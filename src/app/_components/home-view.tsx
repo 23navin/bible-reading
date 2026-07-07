@@ -462,7 +462,7 @@ function NextReadingPrompt({ reading }: { reading: NextReading | null }) {
           href={reading.href}
           target="_blank"
           rel="noopener noreferrer"
-          className="font-semibold text-zinc-100 underline decoration-zinc-500 underline-offset-4 active:text-zinc-400"
+          className="font-semibold text-zinc-100 decoration-zinc-500 underline-offset-4 active:text-zinc-400"
         >
           {reading.passage}
         </a>

@@ -5,6 +5,7 @@ import { CheckIcon, CloseIcon } from "@/components/icons";
 import { createServerSupabase } from "@/lib/db/server";
 import { signAudioPaths } from "@/lib/audio/storage";
 import {
+  bibleComUrl,
   formatEntryPassage,
   type ReadingPlan,
   type ReadingPlanEntry,
@@ -115,7 +116,7 @@ export default async function ReadingPlanPage() {
         </form>
 
         {entries.length > 0 ? (
-          <ul className="mt-8 flex flex-col gap-3 pb-8">
+          <ul className="-mx-4 mt-8 flex flex-col gap-3 pb-8">
             {entries.map((entry) => {
               const log = logByDate.get(entry.date) ?? null;
               return (
@@ -153,18 +154,30 @@ function EntryCard({
 }) {
   const dateLabel = new Date(`${entry.date}T00:00:00`).toLocaleDateString(
     "en-US",
-    { month: "short", day: "numeric" },
+    { month: "long", day: "numeric" },
   );
   const passage = formatEntryPassage(entry);
+  const href = bibleComUrl(entry);
 
   if (!log) {
     return (
       <div className="rounded-2xl bg-zinc-800/40 px-4 py-2.5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="text-sm font-semibold text-zinc-400">
-              {passage}
-            </span>
+            {href ? (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-semibold text-zinc-400 active:text-zinc-500"
+              >
+                {passage}
+              </a>
+            ) : (
+              <span className="text-sm font-semibold text-zinc-400">
+                {passage}
+              </span>
+            )}
             {done ? (
               <CheckIcon className="h-4 w-4 shrink-0 text-zinc-400" />
             ) : null}
@@ -192,7 +205,20 @@ function EntryCard({
           </span>
         )}
         <div className="flex flex-1 items-center justify-between gap-3">
-          <div className="text-sm font-semibold">{passage}</div>
+          <div className="text-sm font-semibold">
+            {href ? (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="active:text-white/70"
+              >
+                {passage}
+              </a>
+            ) : (
+              passage
+            )}
+          </div>
           <span className="shrink-0 text-xs text-white/70">{dateLabel}</span>
         </div>
       </div>

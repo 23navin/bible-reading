@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/db/client";
 import type { Message } from "@/lib/types";
 import LocalTime from "@/components/local-time";
+import { bibleComUrlForReference } from "@/lib/reading-plan";
 
 type Props = {
   message: Message;
@@ -156,6 +157,7 @@ export default function MessageBubble({
   };
 
   const reference = message.reference;
+  const referenceHref = reference ? bibleComUrlForReference(reference) : null;
   const body = message.transcript ?? message.note;
   const hasAudio = Boolean(message.voice_signed_url);
   const authorName = message.profile?.display_name ?? "Someone";
@@ -292,13 +294,29 @@ export default function MessageBubble({
                 </span>
               )}
               {reference ? (
-                <div
-                  className={`text-sm font-semibold ${
-                    isMine ? "text-white" : "text-stone-900"
-                  }`}
-                >
-                  {reference}
-                </div>
+                referenceHref ? (
+                  <a
+                    href={referenceHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className={`text-sm font-semibold ${
+                      isMine
+                        ? "text-white active:text-white/70"
+                        : "text-stone-900 active:text-stone-500"
+                    }`}
+                  >
+                    {reference}
+                  </a>
+                ) : (
+                  <div
+                    className={`text-sm font-semibold ${
+                      isMine ? "text-white" : "text-stone-900"
+                    }`}
+                  >
+                    {reference}
+                  </div>
+                )
               ) : null}
             </div>
           ) : null}

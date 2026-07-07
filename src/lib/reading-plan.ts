@@ -3,6 +3,8 @@
 // there (`npm run seed:plans`). The user's selected plan is
 // profiles.reading_plan_id.
 
+import { parseReferenceInput } from "./passage";
+
 export type ReadingPlan = {
   id: string;
   display_name: string;
@@ -63,6 +65,24 @@ export function bibleComUrl(entry: Pick<ReadingPlanEntry, "begin_chapter" | "end
     if (e.verse != null && e.chapter === b.chapter && e.verse > b.verse) {
       ref += `-${e.verse}`;
     }
+  }
+  return `https://www.bible.com/bible/${BIBLE_COM_VERSION}/${ref}`;
+}
+
+// bible.com URL for a stored log reference ("John 3:16-18", "Genesis 1-2",
+// "Jude 5"). Whole books and chapter ranges link to their first chapter.
+// Returns null for anything parseReferenceInput can't recognize.
+export function bibleComUrlForReference(reference: string): string | null {
+  const checked = parseReferenceInput(reference);
+  if (!checked.ok) return null;
+  const p = checked.passage;
+  if (!p.book) return null;
+  const code = USFM_BOOK_CODES[normalizeBook(p.book)];
+  if (!code) return null;
+  let ref = `${code}.${p.chapter ?? 1}`;
+  if (p.verse_start != null) {
+    ref += `.${p.verse_start}`;
+    if (p.verse_end != null) ref += `-${p.verse_end}`;
   }
   return `https://www.bible.com/bible/${BIBLE_COM_VERSION}/${ref}`;
 }

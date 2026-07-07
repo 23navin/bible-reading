@@ -21,7 +21,7 @@ export function formatPlanDate(isoDate: string): string {
       .toLocaleDateString(undefined, { weekday: "long" })
       .toLowerCase();
   }
-  const label = date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const label = date.toLocaleDateString(undefined, { month: "long", day: "numeric" });
   return date.getFullYear() === now.getFullYear()
     ? label
     : `${label}, ${date.getFullYear()}`;
