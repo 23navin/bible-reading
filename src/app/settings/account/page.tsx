@@ -4,6 +4,7 @@ import { Shell, Header, Body } from "@/components/shell";
 import { CloseIcon } from "@/components/icons";
 import { createServerSupabase } from "@/lib/db/server";
 import { signOut } from "@/app/login/_actions/authenticate";
+import { DisplayNameEditor } from "./_components/display-name-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -38,11 +39,13 @@ export default async function AccountPage() {
       <Body className="flex flex-col gap-8 px-8 py-4">
         <section>
           <p className="text-lg text-zinc-100">
-            display name is "{profile?.display_name ?? "Unknown"}"
+            display name is{" "}
+            <DisplayNameEditor initialName={profile?.display_name ?? "Unknown"} />
           </p>
           {/* Auth emails are synthetic username@vercel.user addresses. */}
           <p className="text-sm text-zinc-500">
-            login as "{user.email?.split("@")[0]}"</p>
+            login as <span className="text-zinc-300">{user.email?.split("@")[0]}</span>
+          </p>
         </section>
 
         <form action={signOut}>

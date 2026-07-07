@@ -27,18 +27,18 @@ export function ArchiveFrame({
       </Header>
 
       <Body className="pb-4">
-        <nav className="mb-3 flex items-center gap-6 bg-zinc-950 px-8 py-2">
+        <nav className="mb-3 flex items-center gap-6 px-8 py-2">
           <Link
             href="/settings/account"
             className="text-sm font-medium text-zinc-400 active:text-white"
           >
-            manage account
+            adjust account
           </Link>
           <Link
             href="/settings/plan"
             className="text-sm font-medium text-zinc-400 active:text-white"
           >
-            reading plan
+            manage reading plan
           </Link>
         </nav>
         <div className="px-3">{children}</div>
