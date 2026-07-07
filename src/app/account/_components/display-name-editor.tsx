@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { setDisplayName } from "../../_actions/set-display-name";
+import { setDisplayName } from "../_actions/set-display-name";
 
 // Inline-editable display name: tap to edit, saves on blur / page close.
 // Empty edits revert to the last saved name instead of persisting.

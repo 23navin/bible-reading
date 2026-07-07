@@ -4,8 +4,8 @@ import { CloseIcon } from "@/components/icons";
 
 const TABS = [
   { id: "log", href: "/archive", title: "personal log", label: "personal log" },
-  { id: "account", href: "/settings/account", title: "account", label: "adjust account" },
-  { id: "plan", href: "/settings/plan", title: "reading plan", label: "manage reading plan" },
+  { id: "account", href: "/account", title: "account", label: "adjust account" },
+  { id: "plan", href: "/plan", title: "reading plan", label: "manage reading plan" },
 ] as const;
 
 export type ProfileTab = (typeof TABS)[number]["id"];

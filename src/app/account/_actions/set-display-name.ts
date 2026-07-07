@@ -32,6 +32,6 @@ export async function setDisplayName(rawName: string) {
     profileCookieOptions,
   );
 
-  revalidatePath("/settings/account");
+  revalidatePath("/account");
   revalidatePath("/");
 }

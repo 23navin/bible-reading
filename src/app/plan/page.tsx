@@ -11,7 +11,7 @@ import {
   type ReadingPlanEntry,
 } from "@/lib/reading-plan";
 import ArchiveAudioButton from "@/app/archive/_components/archive-audio-button";
-import { setReadingPlan } from "../_actions/set-reading-plan";
+import { setReadingPlan } from "./_actions/set-reading-plan";
 
 export const dynamic = "force-dynamic";
 
