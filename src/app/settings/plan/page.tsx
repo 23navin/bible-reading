@@ -228,9 +228,6 @@ function PlanOption({
       <span className="flex w-full items-center justify-between gap-3">
         <span className="flex min-w-0 items-baseline gap-2">
           <span className="text-lg text-zinc-100">{name}</span>
-          {detail ? (
-            <span className="shrink-0 text-sm text-zinc-500">{detail}</span>
-          ) : null}
         </span>
         {selected ? (
           <CheckIcon className="h-5 w-5 shrink-0 text-zinc-100" />
