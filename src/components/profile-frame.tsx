@@ -27,7 +27,9 @@ export function ProfileFrame({
 }) {
   const current = TABS.find((t) => t.id === tab)!;
   return (
-    <Shell className="bg-neutral-900 text-neutral-100">
+    // Document flow (not the fixed viewport shell) so the logs scroll as a
+    // normal page: iOS Safari lets them slide under its bottom URL bar.
+    <Shell flow="document" className="bg-neutral-900 text-neutral-100">
       <Header className="flex items-center justify-between px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
         <h1 className="text-2xl font-semibold tracking-tight">
           <span className="text-white">{name}</span>&apos;s {current.title}
@@ -41,7 +43,7 @@ export function ProfileFrame({
         </Link>
       </Header>
 
-      <Body className="pb-4">
+      <Body flow="document" className="pb-[max(1rem,env(safe-area-inset-bottom))]">
         <nav className="mb-3 flex items-center gap-6 px-8">
           {TABS.filter((t) => t.id !== tab).map((t) => (
             <Link
