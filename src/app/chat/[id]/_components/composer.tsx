@@ -64,7 +64,9 @@ export default function Composer({
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const rec = new MediaRecorder(stream);
+      // Voice memos are mono speech — 32 kbps keeps files small (storage
+      // egress is billed) and Safari treats this as a hint it may ignore.
+      const rec = new MediaRecorder(stream, { audioBitsPerSecond: 32_000 });
       chunksRef.current = [];
       finalTextRef.current = "";
       parsedRef.current = null;

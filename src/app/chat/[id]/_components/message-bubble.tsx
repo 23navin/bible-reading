@@ -331,7 +331,7 @@ export default function MessageBubble({
             <audio
               ref={audioRef}
               src={message.voice_signed_url ?? undefined}
-              preload="metadata"
+              preload="none"
               className="hidden"
             />
           ) : null}

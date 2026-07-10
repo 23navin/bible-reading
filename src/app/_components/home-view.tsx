@@ -148,7 +148,9 @@ export default function HomeView({
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
-        const rec = new MediaRecorder(stream);
+        // Voice memos are mono speech — 32 kbps keeps files small (storage
+        // egress is billed) and Safari treats this as a hint it may ignore.
+        const rec = new MediaRecorder(stream, { audioBitsPerSecond: 32_000 });
         activeRec = rec;
         chunksRef.current = [];
         finalTextRef.current = "";
