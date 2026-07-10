@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/db/client";
 import { DiscardButton } from "@/components/discard-button";
 import { ShareTargets } from "@/components/share-targets";
-import type { ParsedPassage } from "@/lib/passage";
+import { parseReferenceInput, type ParsedPassage } from "@/lib/passage";
 import type { ChatSummary, Me } from "@/lib/types";
 
 const VOICE_BUCKET = "audio-memos";
@@ -242,6 +242,20 @@ export default function VoiceReview({
   }
 
   async function send() {
+    // A hand-edited reference cleared the model-parsed passage, so validate
+    // it the same way the text composer does and rebuild the passage fields
+    // from it — otherwise book/chapter/verse land in the DB as nulls.
+    let finalPassage = passage;
+    if (!finalPassage && (reference ?? "").trim()) {
+      const checked = parseReferenceInput(reference ?? "");
+      if (!checked.ok) {
+        setError(checked.error);
+        return;
+      }
+      finalPassage = checked.passage;
+      setReference(checked.passage.reference); // show the normalized form
+      setPassage(checked.passage);
+    }
     setSending(true);
     setError(null);
     try {
@@ -259,11 +273,11 @@ export default function VoiceReview({
           note: null,
           voice_path: path,
           transcript: transcript || null,
-          reference,
-          book: passage?.book ?? null,
-          chapter: passage?.chapter ?? null,
-          verse_start: passage?.verse_start ?? null,
-          verse_end: passage?.verse_end ?? null,
+          reference: finalPassage?.reference ?? null,
+          book: finalPassage?.book ?? null,
+          chapter: finalPassage?.chapter ?? null,
+          verse_start: finalPassage?.verse_start ?? null,
+          verse_end: finalPassage?.verse_end ?? null,
           created_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
         })
         .select("id")
@@ -352,6 +366,7 @@ export default function VoiceReview({
                 userEditedReferenceRef.current = true;
                 setReference(e.target.value);
                 setPassage(null);
+                setError(null);
               }}
               readOnly={liveTranscribing}
               placeholder="Passage Reference"
