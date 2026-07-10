@@ -458,7 +458,7 @@ function NextReadingPrompt({ reading }: { reading: NextReading | null }) {
 
   return (
     <p className="text-left">
-      Next reading: {formatPlanDate(reading.date)}{" "}
+      {formatPlanDate(reading.date)}{" "}
       {reading.href ? (
         <a
           href={reading.href}
