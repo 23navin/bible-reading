@@ -11,18 +11,21 @@ import type { ChatSummary, Me } from "@/lib/types";
 export default function TextComposer({
   me,
   chats,
+  initialReference = null,
   onClose,
   exiting = false,
 }: {
   me: Me;
   chats: ChatSummary[];
+  /** Prefilled passage reference (from a plan-day deep link). */
+  initialReference?: string | null;
   onClose: () => void;
   exiting?: boolean;
 }) {
   const router = useRouter();
   const [supabase] = useState(() => createClient());
   const [text, setText] = useState("");
-  const [reference, setReference] = useState<string | null>(null);
+  const [reference, setReference] = useState<string | null>(initialReference);
   const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);

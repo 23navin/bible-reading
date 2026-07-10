@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import VoiceReview from "./voice-review";
 import TextComposer from "./text-composer";
 import { createChat } from "@/app/_actions/create-chat";
-import { SpeechmaticsSession } from "@/lib/speech/speechmatics";
+import { useVoiceRecorder } from "@/lib/audio/use-voice-recorder";
 import { Shell, Header, Body, Footer } from "@/components/shell";
 import { Avatar, AvatarStack } from "@/components/avatar";
 import { CloseIcon } from "@/components/icons";
@@ -14,7 +14,7 @@ import { useHydrated } from "@/components/local-time";
 import type { ChatSummary, Me } from "@/lib/types";
 import type { NextReading } from "@/lib/reading-plan";
 
-type Mode = "idle" | "recording" | "review" | "text";
+type Mode = "idle" | "review" | "text";
 
 export default function HomeView({
   me,
@@ -27,244 +27,38 @@ export default function HomeView({
 }) {
   const [mode, setMode] = useState<Mode>("idle");
   const [blob, setBlob] = useState<Blob | null>(null);
-  const [realtimeTranscript, setRealtimeTranscript] = useState<string | null>(null);
-  const [liveTranscribing, setLiveTranscribing] = useState(false);
-  const [elapsedMs, setElapsedMs] = useState(0);
-  const [micError, setMicError] = useState<string | null>(null);
   const [exiting, setExiting] = useState(false);
-  const [recordingReady, setRecordingReady] = useState(false);
-  const [stopping, setStopping] = useState(false);
   const [creatingChat, setCreatingChat] = useState(false);
   // Chat timestamps depend on the viewer's timezone, so they can only be
   // rendered after hydration.
   const hydrated = useHydrated();
 
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const startedAtRef = useRef<number | null>(null);
-  const sessionRef = useRef<SpeechmaticsSession | null>(null);
-  const finalTextRef = useRef("");
-  const realtimeFailedRef = useRef(false);
+  const recorder = useVoiceRecorder({
+    onReview: (recordedBlob) => {
+      setBlob(recordedBlob);
+      setMode("review");
+    },
+  });
 
   const openVoice = () => {
-    setMicError(null);
-    finalTextRef.current = "";
-    realtimeFailedRef.current = false;
-    // Empty string (vs. null) signals to VoiceReview that realtime is the
-    // source of truth; we'll fall back to null only if the session fails
-    // before stop.
-    setRealtimeTranscript("");
-    setLiveTranscribing(false);
-    setRecordingReady(false);
-    setStopping(false);
     setCreatingChat(false);
-    setMode("recording");
+    recorder.start();
   };
   const openText = () => {
     setCreatingChat(false);
     setMode("text");
   };
   const closeOverlay = () => {
-    if (mode === "review" || mode === "text") {
-      setExiting(true);
-      setTimeout(() => {
-        setMode("idle");
-        setBlob(null);
-        setRealtimeTranscript(null);
-        setLiveTranscribing(false);
-        setExiting(false);
-      }, 200);
-    } else {
+    setExiting(true);
+    setTimeout(() => {
       setMode("idle");
       setBlob(null);
-      setRealtimeTranscript(null);
-      setLiveTranscribing(false);
-    }
+      setExiting(false);
+    }, 200);
   };
 
-  useEffect(() => {
-    if (mode !== "recording") return;
-
-    let aborted = false;
-    let activeRec: MediaRecorder | null = null;
-
-    // Mint the Speechmatics token in parallel with the start animation and
-    // mic-permission prompt so it's ready when SpeechmaticsSession needs it.
-    const tokenPromise: Promise<string | undefined> = fetch(
-      "/api/speech/token",
-      { method: "POST" },
-    )
-      .then((r) => (r.ok ? (r.json() as Promise<{ token: string }>) : null))
-      .then((d) => d?.token)
-      .catch(() => undefined);
-
-    const finalizeAndOpenReview = async (recordedBlob: Blob) => {
-      // Null the session ref before any setMode so the mode-change cleanup
-      // below doesn't abort the live session out from under us.
-      const session = sessionRef.current;
-      sessionRef.current = null;
-
-      if (realtimeFailedRef.current) {
-        // Realtime never came up. Fall back to Whisper: hand the blob to
-        // VoiceReview, which will transcribe it itself.
-        session?.abort();
-        setRealtimeTranscript(null);
-        setBlob(recordedBlob);
-        setMode("review");
-        return;
-      }
-
-      // Realtime is alive. Move to review immediately so the user sees the
-      // streaming transcript fill in, and finish the stop in the background.
-      // Cleanup + passage parsing happen in VoiceReview once the transcript
-      // settles.
-      setBlob(recordedBlob);
-      setLiveTranscribing(true);
-      setMode("review");
-
-      if (session) {
-        try {
-          const finalText = await session.stop();
-          if (finalText) finalTextRef.current = finalText;
-          setRealtimeTranscript(finalTextRef.current);
-        } catch (err) {
-          console.warn("speechmatics stop failed", err);
-        }
-      }
-      setLiveTranscribing(false);
-    };
-
-    // Bring up the Speechmatics audio path BEFORE starting MediaRecorder.
-    // On iOS, attaching an AudioContext to a getUserMedia stream briefly
-    // reconfigures the audio session for voice processing — that reroute
-    // drops a few ms of samples. If MediaRecorder is already recording when
-    // it happens, those dropped samples show up as a stitched/skipped
-    // syllable at the start of the clip. Doing prepareAudio first keeps
-    // the disruption out of the recording entirely.
-    void (async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        if (aborted) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        // Voice memos are mono speech — 32 kbps keeps files small (storage
-        // egress is billed) and Safari treats this as a hint it may ignore.
-        const rec = new MediaRecorder(stream, { audioBitsPerSecond: 32_000 });
-        activeRec = rec;
-        chunksRef.current = [];
-        finalTextRef.current = "";
-        realtimeFailedRef.current = false;
-        rec.ondataavailable = (e) => {
-          if (e.data.size > 0) chunksRef.current.push(e.data);
-        };
-        rec.onstop = () => {
-          stream.getTracks().forEach((t) => t.stop());
-          if (aborted) return;
-          const b = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
-          void finalizeAndOpenReview(b);
-        };
-
-        const session = new SpeechmaticsSession({
-          onPartial: (full) => {
-            // Partials only fire during recording (Speechmatics stops sending
-            // them after StopRecognition). Pushing them into state lets a
-            // post-stop view show the trailing partial without a stutter
-            // while the final segments catch up.
-            setRealtimeTranscript(full);
-          },
-          onFinal: (full) => {
-            finalTextRef.current = full;
-            setRealtimeTranscript(full);
-          },
-          onError: (err) => {
-            console.warn("speechmatics error", err);
-            realtimeFailedRef.current = true;
-          },
-        });
-        // Track immediately so a stop/cancel mid-handshake can abort it.
-        sessionRef.current = session;
-
-        try {
-          await session.prepareAudio(stream);
-        } catch (err) {
-          console.warn("speechmatics prepareAudio failed", err);
-          realtimeFailedRef.current = true;
-          session.abort();
-          if (sessionRef.current === session) sessionRef.current = null;
-        }
-        if (aborted) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-
-        rec.start();
-        startedAtRef.current = Date.now();
-        setElapsedMs(0);
-        recorderRef.current = rec;
-        setRecordingReady(true);
-
-        if (!realtimeFailedRef.current) {
-          void (async () => {
-            try {
-              const token = await tokenPromise;
-              await session.connectClient(token ? { token } : undefined);
-              if (aborted) {
-                session.abort();
-                if (sessionRef.current === session) sessionRef.current = null;
-              }
-            } catch (err) {
-              console.warn("speechmatics connectClient failed", err);
-              realtimeFailedRef.current = true;
-              session.abort();
-              if (sessionRef.current === session) sessionRef.current = null;
-            }
-          })();
-        }
-      } catch {
-        if (!aborted) {
-          setMicError("Microphone access denied.");
-          setMode("idle");
-        }
-      }
-    })();
-
-    return () => {
-      aborted = true;
-      if (recorderRef.current === activeRec) recorderRef.current = null;
-      if (activeRec && activeRec.state !== "inactive") activeRec.stop();
-      if (sessionRef.current) {
-        sessionRef.current.abort();
-        sessionRef.current = null;
-      }
-    };
-  }, [mode]);
-
-  useEffect(() => {
-    if (mode !== "recording") return;
-    const id = setInterval(() => {
-      if (startedAtRef.current != null) {
-        setElapsedMs(Date.now() - startedAtRef.current);
-      }
-    }, 250);
-    return () => clearInterval(id);
-  }, [mode]);
-
-  function stopRecording() {
-    if (!recordingReady) {
-      // User tapped the (already-morphed) button before the session finished
-      // connecting. Treat it as a cancel rather than a silent no-op.
-      setMode("idle");
-      return;
-    }
-    if (stopping) return;
-    setStopping(true);
-    recorderRef.current?.stop();
-    recorderRef.current = null;
-  }
-
   const displayName = me.display_name ?? me.username ?? "Unknown";
-  const recording = mode === "recording";
+  const recording = recorder.recording;
   const overlayActive = mode === "review" || mode === "text" || exiting;
 
   return (
@@ -275,7 +69,7 @@ export default function HomeView({
             <span className="h-10 w-10" aria-hidden />
             <button
               type="button"
-              onClick={closeOverlay}
+              onClick={recorder.cancel}
               aria-label="Cancel recording"
               className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-2 active:bg-neutral-800"
             >
@@ -303,9 +97,9 @@ export default function HomeView({
         {recording ? (
           <div className="screen-fade-in flex h-full items-center justify-center">
             <p className="text-center italic text-md text-neutral-600">
-              {stopping
+              {recorder.stopping
                 ? "finishing up…"
-                : recordingReady
+                : recorder.recordingReady
                   ? "start by saying the passage"
                   : "connecting…"}
             </p>
@@ -388,8 +182,8 @@ export default function HomeView({
         <Footer className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
           <div className="mb-2 flex min-h-5 justify-center text-sm text-neutral-400">
             {recording ? (
-              <p aria-hidden={!recordingReady} className="text-center tabular-nums">
-                {recordingReady ? formatElapsed(elapsedMs) : " "}
+              <p aria-hidden={!recorder.recordingReady} className="text-center tabular-nums">
+                {recorder.recordingReady ? formatElapsed(recorder.elapsedMs) : " "}
               </p>
             ) : hydrated ? (
               <NextReadingPrompt reading={nextReading} />
@@ -398,8 +192,8 @@ export default function HomeView({
           <div className="flex">
             <button
               type="button"
-              onClick={recording ? stopRecording : openVoice}
-              disabled={recording && stopping}
+              onClick={recording ? recorder.stop : openVoice}
+              disabled={recording && recorder.stopping}
               aria-label={recording ? "Stop recording" : "Record voice log"}
               className="flex h-20 min-w-0 flex-1 items-center justify-center rounded-md border border-red-500 bg-transparent active:bg-red-500/10 disabled:opacity-60"
             >
@@ -426,8 +220,8 @@ export default function HomeView({
               <KeyboardIcon className="h-7 w-7 shrink-0" />
             </button>
           </div>
-          {micError ? (
-            <p className="pt-3 text-center text-sm text-red-400">{micError}</p>
+          {recorder.micError ? (
+            <p className="pt-3 text-center text-sm text-red-400">{recorder.micError}</p>
           ) : null}
         </Footer>
       ) : null}
@@ -437,8 +231,8 @@ export default function HomeView({
           me={me}
           chats={chats}
           blob={blob}
-          initialTranscript={realtimeTranscript}
-          liveTranscribing={liveTranscribing}
+          initialTranscript={recorder.realtimeTranscript}
+          liveTranscribing={recorder.liveTranscribing}
           onClose={closeOverlay}
           exiting={exiting}
         />
@@ -451,14 +245,20 @@ export default function HomeView({
 }
 
 // "Next reading: Jun 1 Micah 5" — the earliest plan day without a progress
-// row, with the reference deep-linking into the bible app. Rendered
-// post-hydration only: the date label depends on the viewer's timezone.
+// row, with the date linking to that day on the plan page and the reference
+// deep-linking into the bible app. Rendered post-hydration only: the date
+// label depends on the viewer's timezone.
 function NextReadingPrompt({ reading }: { reading: NextReading | null }) {
   if (!reading) return null;
 
   return (
     <p className="text-left">
-      {formatPlanDate(reading.date)}{" "}
+      <Link
+        href={`/plan#day-${reading.date}`}
+        className="active:text-neutral-200"
+      >
+        {formatPlanDate(reading.date)}
+      </Link>{" "}
       {reading.href ? (
         <a
           href={reading.href}

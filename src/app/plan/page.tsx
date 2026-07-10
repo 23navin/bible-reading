@@ -14,9 +14,14 @@ import {
   type ReadingPlan,
   type ReadingPlanEntry,
 } from "@/lib/reading-plan";
+import { parseReferenceInput } from "@/lib/passage";
+import type { ChatSummary, Me, Member } from "@/lib/types";
 import ArchiveAudioButton from "@/app/archive/_components/archive-audio-button";
 import LocalTime from "@/components/local-time";
 import { PlanSkeleton } from "./_components/plan-skeleton";
+import PlanLogButtons from "./_components/plan-log-buttons";
+import ScrollShortcutButton from "./_components/scroll-shortcut-button";
+import ScrollToHash from "./_components/scroll-to-hash";
 import { setReadingPlan } from "./_actions/set-reading-plan";
 
 export const dynamic = "force-dynamic";
@@ -41,15 +46,27 @@ type ProgressRow = {
   messages: LogRow | LogRow[] | null;
 };
 
+type MembershipChat = {
+  id: string;
+  name: string | null;
+  created_at: string;
+  chat_members: { profiles: Member | Member[] | null }[] | null;
+};
+
+type MembershipRow = { chats: MembershipChat | MembershipChat[] | null };
+
 type PlanData = {
   user: AuthUser | null;
   displayName: string | null;
+  username: string | null;
   translation: string | null;
   selectedId: string | null;
   plans: PlanRow[];
   entries: EntryRow[];
   logByDate: Map<string, LogRow>;
   completedAtByDate: Map<string, string>;
+  // Share targets for the next unread day's in-place log flow.
+  chats: ChatSummary[];
 };
 
 // Days of a plan plus the progress rows (with their completing logs).
@@ -84,12 +101,14 @@ async function loadPlanData(cookiePlanId: string | null | undefined): Promise<Pl
   const empty: PlanData = {
     user: null,
     displayName: null,
+    username: null,
     translation: null,
     selectedId: null,
     plans: [],
     entries: [],
     logByDate: new Map(),
     completedAtByDate: new Map(),
+    chats: [],
   };
 
   const supabase = await createServerSupabase();
@@ -104,17 +123,44 @@ async function loadPlanData(cookiePlanId: string | null | undefined): Promise<Pl
   // surface as an unhandled rejection.
   guessPromise?.catch(() => {});
 
-  const [{ data: profileRow }, { data: planRows }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("reading_plan_id, display_name, bible_translation")
-      .eq("id", user.id)
-      .maybeSingle(),
-    supabase
-      .from("reading_plans")
-      .select("id, display_name, description, reading_plan_entries(count)")
-      .order("display_name"),
-  ]);
+  const [{ data: profileRow }, { data: planRows }, { data: membershipRows }] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select("reading_plan_id, display_name, username, bible_translation")
+        .eq("id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("reading_plans")
+        .select("id, display_name, description, reading_plan_entries(count)")
+        .order("display_name"),
+      supabase
+        .from("chat_members")
+        .select("chats(id, name, created_at, chat_members(profiles(id, display_name)))")
+        .eq("user_id", user.id),
+    ]);
+
+  // Like the home page's chat list, minus the unread/last-message lookups —
+  // the log flow's share list only shows names and members.
+  const chats: ChatSummary[] = ((membershipRows ?? []) as MembershipRow[])
+    .map((row): ChatSummary | null => {
+      const chat = Array.isArray(row.chats) ? row.chats[0] : row.chats;
+      if (!chat) return null;
+      const members: Member[] = (chat.chat_members ?? [])
+        .map((cm) => (Array.isArray(cm.profiles) ? cm.profiles[0] : cm.profiles))
+        .filter((p): p is Member => p !== null && p !== undefined);
+      const others = members.filter((m) => m.id !== user.id);
+      return {
+        id: chat.id,
+        name: chat.name ?? "Untitled",
+        members: others.length > 0 ? others : members,
+        hasUnread: false,
+        lastMessageAt: null,
+        createdAt: chat.created_at,
+      };
+    })
+    .filter((c): c is ChatSummary => c !== null)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
   const selectedId = profileRow?.reading_plan_id ?? null;
 
@@ -137,12 +183,14 @@ async function loadPlanData(cookiePlanId: string | null | undefined): Promise<Pl
   return {
     user,
     displayName: profileRow?.display_name ?? null,
+    username: profileRow?.username ?? null,
     translation: profileRow?.bible_translation ?? null,
     selectedId,
     plans: (planRows ?? []) as PlanRow[],
     entries,
     logByDate,
     completedAtByDate,
+    chats,
   };
 }
 
@@ -181,14 +229,48 @@ async function PlanContent({ dataPromise }: { dataPromise: Promise<PlanData> }) 
   const {
     user,
     displayName,
+    username,
     translation,
     selectedId,
     plans,
     entries,
     logByDate,
     completedAtByDate,
+    chats,
   } = await dataPromise;
   if (!user) redirect("/login");
+
+  // Day with the newest completion timestamp — the scroll shortcut's target.
+  let latestCompletedDate: string | null = null;
+  let latestCompletedAt = "";
+  for (const [date, at] of completedAtByDate) {
+    if (at > latestCompletedAt) {
+      latestCompletedAt = at;
+      latestCompletedDate = date;
+    }
+  }
+
+  // The next unread day gets voice/text log buttons that run the log flow
+  // right here on the plan page.
+  const nextEntry = entries.find((e) => !completedAtByDate.has(e.date)) ?? null;
+  let nextLogButtons: React.ReactNode = null;
+  if (nextEntry) {
+    const nextPassage = formatEntryPassage(nextEntry);
+    const me: Me = { id: user.id, username, display_name: displayName };
+    nextLogButtons = (
+      <PlanLogButtons
+        me={me}
+        chats={chats}
+        // The composed passage when it's a form parseReferenceInput accepts,
+        // else the entry's first chapter (cross-book spans like
+        // "Malachi 4 - Matthew 1" don't parse).
+        reference={
+          parseReferenceInput(nextPassage).ok ? nextPassage : nextEntry.begin_chapter
+        }
+        passage={nextPassage}
+      />
+    );
+  }
 
   return (
     <>
@@ -208,18 +290,25 @@ async function PlanContent({ dataPromise }: { dataPromise: Promise<PlanData> }) 
       </form>
 
       {entries.length > 0 ? (
-        <ul className="-mx-4 mt-8 flex flex-col gap-3 pb-8">
-          {entries.map((entry) => (
-            <li key={entry.date}>
-              <EntryCard
-                entry={entry}
-                log={logByDate.get(entry.date) ?? null}
-                completedAt={completedAtByDate.get(entry.date) ?? null}
-                translation={translation}
-              />
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="-mx-4 mt-8 flex flex-col gap-3 pb-8">
+            {entries.map((entry) => (
+              <li key={entry.date} id={`day-${entry.date}`}>
+                <EntryCard
+                  entry={entry}
+                  log={logByDate.get(entry.date) ?? null}
+                  completedAt={completedAtByDate.get(entry.date) ?? null}
+                  translation={translation}
+                  logButtons={entry === nextEntry ? nextLogButtons : null}
+                />
+              </li>
+            ))}
+          </ul>
+          <ScrollShortcutButton
+            targetId={latestCompletedDate ? `day-${latestCompletedDate}` : null}
+          />
+          <ScrollToHash />
+        </>
       ) : null}
     </>
   );
@@ -230,11 +319,13 @@ function EntryCard({
   log,
   completedAt,
   translation,
+  logButtons,
 }: {
   entry: EntryRow;
   log: LogRow | null;
   completedAt: string | null;
   translation: string | null;
+  logButtons?: React.ReactNode;
 }) {
   // Completed entries show when they were logged (in the author's timezone
   // when the log recorded one); pending ones show the plan's scheduled date,
@@ -278,7 +369,10 @@ function EntryCard({
               <CheckIcon className="h-4 w-4 shrink-0 text-neutral-400" />
             ) : null}
           </div>
-          <span className="shrink-0 text-xs text-neutral-500">{dateLabel}</span>
+          <div className="flex shrink-0 items-center gap-2">
+            {logButtons}
+            <span className="text-xs text-neutral-500">{dateLabel}</span>
+          </div>
         </div>
       </div>
     );

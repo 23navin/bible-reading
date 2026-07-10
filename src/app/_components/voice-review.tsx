@@ -16,6 +16,7 @@ export default function VoiceReview({
   blob,
   initialTranscript,
   liveTranscribing = false,
+  initialReference = null,
   onClose,
   exiting = false,
 }: {
@@ -26,6 +27,8 @@ export default function VoiceReview({
   initialTranscript?: string | null;
   /** True while the realtime session is still streaming finals after stop. */
   liveTranscribing?: boolean;
+  /** Prefilled passage reference (from a plan-day deep link). */
+  initialReference?: string | null;
   onClose: () => void;
   exiting?: boolean;
 }) {
@@ -35,10 +38,12 @@ export default function VoiceReview({
   const [transcript, setTranscript] = useState(initialTranscript ?? "");
   const [transcribing, setTranscribing] = useState(!hasRealtime);
   const [cleanupSettled, setCleanupSettled] = useState(false);
-  const [reference, setReference] = useState<string | null>(null);
+  const [reference, setReference] = useState<string | null>(initialReference);
   const [passage, setPassage] = useState<ParsedPassage | null>(null);
   const userEditedTranscriptRef = useRef(false);
-  const userEditedReferenceRef = useRef(false);
+  // A prefilled reference is the tapped plan day's — authoritative, so the
+  // model's parse of the transcript must not overwrite it.
+  const userEditedReferenceRef = useRef(initialReference != null);
   const cleanupStartedRef = useRef(false);
   const cleanedAppliedRef = useRef(false);
   const cleanupAbortRef = useRef<AbortController | null>(null);
