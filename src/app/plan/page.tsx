@@ -6,8 +6,9 @@ import { ProfileFrame, NameSkeleton } from "@/components/profile-frame";
 import { ProfileCookieSync } from "@/components/profile-cookie";
 import { PROFILE_COOKIE, parseProfileCookie } from "@/lib/auth/profile-cookie";
 import { CheckIcon } from "@/components/icons";
-import { createServerSupabase } from "@/lib/db/server";
-import { getAuthUser, type AuthUser } from "@/lib/auth/user";
+import { getSession } from "@/lib/auth/session";
+import { flattenMemberships, MEMBERSHIPS_SELECT, type MembershipRow } from "@/lib/db/chats";
+import type { AuthUser } from "@/lib/auth/user";
 import {
   bibleComUrl,
   formatEntryPassage,
@@ -15,7 +16,7 @@ import {
   type ReadingPlanEntry,
 } from "@/lib/reading-plan";
 import { parseReferenceInput } from "@/lib/passage";
-import type { ChatSummary, Me, Member } from "@/lib/types";
+import type { ChatSummary, Me } from "@/lib/types";
 import ArchiveAudioButton from "@/app/archive/_components/archive-audio-button";
 import LocalTime from "@/components/local-time";
 import { PlanSkeleton } from "./_components/plan-skeleton";
@@ -45,15 +46,6 @@ type ProgressRow = {
   completed_at: string;
   messages: LogRow | LogRow[] | null;
 };
-
-type MembershipChat = {
-  id: string;
-  name: string | null;
-  created_at: string;
-  chat_members: { profiles: Member | Member[] | null }[] | null;
-};
-
-type MembershipRow = { chats: MembershipChat | MembershipChat[] | null };
 
 type PlanData = {
   user: AuthUser | null;
@@ -111,8 +103,7 @@ async function loadPlanData(cookiePlanId: string | null | undefined): Promise<Pl
     chats: [],
   };
 
-  const supabase = await createServerSupabase();
-  const user = await getAuthUser(supabase);
+  const { supabase, user } = await getSession();
   if (!user) return empty;
 
   const guessPromise =
@@ -134,33 +125,15 @@ async function loadPlanData(cookiePlanId: string | null | undefined): Promise<Pl
         .from("reading_plans")
         .select("id, display_name, description, reading_plan_entries(count)")
         .order("display_name"),
-      supabase
-        .from("chat_members")
-        .select("chats(id, name, created_at, chat_members(profiles(id, display_name)))")
-        .eq("user_id", user.id),
+      supabase.from("chat_members").select(MEMBERSHIPS_SELECT).eq("user_id", user.id),
     ]);
 
   // Like the home page's chat list, minus the unread/last-message lookups —
   // the log flow's share list only shows names and members.
-  const chats: ChatSummary[] = ((membershipRows ?? []) as MembershipRow[])
-    .map((row): ChatSummary | null => {
-      const chat = Array.isArray(row.chats) ? row.chats[0] : row.chats;
-      if (!chat) return null;
-      const members: Member[] = (chat.chat_members ?? [])
-        .map((cm) => (Array.isArray(cm.profiles) ? cm.profiles[0] : cm.profiles))
-        .filter((p): p is Member => p !== null && p !== undefined);
-      const others = members.filter((m) => m.id !== user.id);
-      return {
-        id: chat.id,
-        name: chat.name ?? "Untitled",
-        members: others.length > 0 ? others : members,
-        hasUnread: false,
-        lastMessageAt: null,
-        createdAt: chat.created_at,
-      };
-    })
-    .filter((c): c is ChatSummary => c !== null)
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  const chats: ChatSummary[] = flattenMemberships(
+    (membershipRows ?? []) as MembershipRow[],
+    user.id,
+  );
 
   const selectedId = profileRow?.reading_plan_id ?? null;
 
@@ -196,7 +169,12 @@ async function loadPlanData(cookiePlanId: string | null | undefined): Promise<Pl
 
 // Like /archive, the frame streams immediately: only the cookie read is
 // awaited before returning JSX; the data resolves inside Suspense.
-export default async function ReadingPlanPage() {
+export default async function ReadingPlanPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
   const profile = parseProfileCookie((await cookies()).get(PROFILE_COOKIE)?.value);
   const dataPromise = loadPlanData(profile?.planId);
 
@@ -212,6 +190,7 @@ export default async function ReadingPlanPage() {
         )
       }
     >
+      {error ? <p className="pb-4 text-sm text-red-400">{error}</p> : null}
       <Suspense fallback={<PlanSkeleton />}>
         <PlanContent dataPromise={dataPromise} />
       </Suspense>

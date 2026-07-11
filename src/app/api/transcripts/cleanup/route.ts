@@ -1,8 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
+import { getApiUser } from "@/lib/auth/api";
 import { CLEANUP_TRANSCRIPT_SYSTEM } from "./prompt";
 
+// The client budgets 20s for this call (voice-review); Vercel Hobby's default
+// timeout is shorter, so raise it explicitly.
+export const maxDuration = 60;
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const MAX_TEXT_LENGTH = 20_000;
 
 const NULL_PASSAGE = {
   book: null,
@@ -13,9 +20,17 @@ const NULL_PASSAGE = {
 };
 
 export async function POST(request: Request) {
+  const user = await getApiUser();
+  if (!user) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   const { text } = (await request.json()) as { text?: string };
   if (!text || !text.trim()) {
     return NextResponse.json({ text: text ?? "", ...NULL_PASSAGE });
+  }
+  if (text.length > MAX_TEXT_LENGTH) {
+    return NextResponse.json({ error: "text too long" }, { status: 400 });
   }
 
   let result;

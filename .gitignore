@@ -40,8 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-
-migrations/
 .mcp.json
 AGENTS.MD
 CLAUDE.MD

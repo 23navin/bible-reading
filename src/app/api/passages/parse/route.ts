@@ -1,13 +1,26 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
+import { getApiUser } from "@/lib/auth/api";
 import { PARSE_PASSAGE_SYSTEM } from "./prompt";
+
+export const maxDuration = 30;
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+const MAX_TEXT_LENGTH = 10_000;
+
 export async function POST(request: Request) {
+  const user = await getApiUser();
+  if (!user) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   const { text } = (await request.json()) as { text?: string };
   if (!text || !text.trim()) {
     return NextResponse.json({ reference: null, book: null, chapter: null, verse_start: null, verse_end: null, matched_text: null });
+  }
+  if (text.length > MAX_TEXT_LENGTH) {
+    return NextResponse.json({ error: "text too long" }, { status: 400 });
   }
 
   let result;

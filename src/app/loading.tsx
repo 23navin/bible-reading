@@ -1,4 +1,5 @@
 import { CookieAvatar, CookieDisplayName } from "@/components/profile-cookie";
+import { KeyboardIcon } from "@/components/icons";
 import { Shell, Header, Body, Footer } from "@/components/shell";
 
 // Mirrors HomeView's idle frame so the streamed page swaps in without a
@@ -89,23 +90,5 @@ export default function HomeLoading() {
         </div>
       </Footer>
     </Shell>
-  );
-}
-
-function KeyboardIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <rect x="2" y="6" width="20" height="13" rx="2" />
-      <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14.5h10" />
-    </svg>
   );
 }

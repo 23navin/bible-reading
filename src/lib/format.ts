@@ -5,22 +5,26 @@ export function formatElapsed(ms: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-// Plan-day label: "today" / "yesterday" / "tomorrow", weekday within a week
+// Whole local days from `date` to today: 0 = today, positive = past,
+// negative = future.
+export function daysAgo(date: Date): number {
+  const startOfDay = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return Math.round((startOfDay(new Date()) - startOfDay(date)) / 86_400_000);
+}
+
+// Plan-day label: "Today" / "Yesterday" / "Tomorrow", weekday within a week
 // (either direction), otherwise "January 5" (with year if not this year).
 export function formatPlanDate(isoDate: string): string {
   const date = new Date(`${isoDate}T00:00:00`);
-  const now = new Date();
-  const startOfDay = (d: Date) =>
-    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const diffDays = Math.round((startOfDay(date) - startOfDay(now)) / 86_400_000);
-  if (diffDays === 0) return "Today";
-  if (diffDays === -1) return "Yesterday";
-  if (diffDays === 1) return "Tomorrow";
-  if (Math.abs(diffDays) < 7) {
-    return date
-      .toLocaleDateString(undefined, { weekday: "long" })
-      // .toLowerCase();
+  const ago = daysAgo(date);
+  if (ago === 0) return "Today";
+  if (ago === 1) return "Yesterday";
+  if (ago === -1) return "Tomorrow";
+  if (Math.abs(ago) < 7) {
+    return date.toLocaleDateString(undefined, { weekday: "long" });
   }
+  const now = new Date();
   const label = date.toLocaleDateString(undefined, { month: "long", day: "numeric" });
   return date.getFullYear() === now.getFullYear()
     ? label
@@ -29,13 +33,8 @@ export function formatPlanDate(isoDate: string): string {
 
 export function formatChatTimestamp(iso: string): string {
   const date = new Date(iso);
-  const now = new Date();
-  const startOfDay = (d: Date) =>
-    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const diffDays = Math.round(
-    (startOfDay(now) - startOfDay(date)) / 86_400_000,
-  );
-  if (diffDays <= 0) {
+  const ago = daysAgo(date);
+  if (ago <= 0) {
     return date
       .toLocaleTimeString(undefined, {
         hour: "numeric",
@@ -44,8 +43,8 @@ export function formatChatTimestamp(iso: string): string {
       })
       .toLowerCase();
   }
-  if (diffDays === 1) return "yesterday";
-  if (diffDays < 7) {
+  if (ago === 1) return "yesterday";
+  if (ago < 7) {
     return date
       .toLocaleDateString(undefined, { weekday: "long" })
       .toLowerCase();
@@ -54,4 +53,26 @@ export function formatChatTimestamp(iso: string): string {
   const d = date.getDate();
   const y = String(date.getFullYear() % 100).padStart(2, "0");
   return `${m}/${d}/${y}`;
+}
+
+// Chat day-divider label: "Today" / "Yesterday" / "Wed, Jun 3" (+ year when
+// not this year).
+export function formatDateDivider(iso: string): string {
+  const date = new Date(iso);
+  const ago = daysAgo(date);
+  if (ago === 0) return "Today";
+  if (ago === 1) return "Yesterday";
+  const sameYear = date.getFullYear() === new Date().getFullYear();
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
+}
+
+// Groups timestamps by viewer-local calendar day.
+export function dayKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }

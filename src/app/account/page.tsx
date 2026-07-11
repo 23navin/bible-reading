@@ -1,8 +1,6 @@
-import { redirect } from "next/navigation";
 import { ProfileFrame } from "@/components/profile-frame";
 import { ProfileCookieSync } from "@/components/profile-cookie";
-import { createServerSupabase } from "@/lib/db/server";
-import { getAuthUser } from "@/lib/auth/user";
+import { requireUser } from "@/lib/auth/session";
 import { signOut } from "@/app/login/_actions/authenticate";
 import { BIBLE_TRANSLATIONS, DEFAULT_TRANSLATION } from "@/lib/reading-plan";
 import { DisplayNameEditor } from "./_components/display-name-editor";
@@ -10,10 +8,13 @@ import { setBibleTranslation } from "./_actions/set-bible-translation";
 
 export const dynamic = "force-dynamic";
 
-export default async function AccountPage() {
-  const supabase = await createServerSupabase();
-  const user = await getAuthUser(supabase);
-  if (!user) redirect("/login");
+export default async function AccountPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
+  const { supabase, user } = await requireUser();
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -30,6 +31,7 @@ export default async function AccountPage() {
       contentClassName="flex flex-col gap-8 px-8"
     >
       <ProfileCookieSync id={user.id} name={profile?.display_name ?? null} />
+      {error ? <p className="text-sm text-red-400">{error}</p> : null}
       <section>
         <p className="text-lg text-neutral-100">
           display name is{" "}

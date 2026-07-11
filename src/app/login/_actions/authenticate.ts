@@ -40,9 +40,6 @@ export async function authenticate(formData: FormData) {
   if (!isValidUsername(username)) {
     fail("Username must be 2-32 chars: letters, digits, _ . -", next);
   }
-  if (password.length < 3) {
-    fail("Password must be at least 6 characters.", next);
-  }
 
   const supabase = await createServerSupabase();
   const email = usernameToEmail(username);
@@ -71,6 +68,12 @@ export async function authenticate(formData: FormData) {
   const isInvalidCreds = /invalid/i.test(signIn.error.message);
   if (!isInvalidCreds) {
     fail(signIn.error.message, next);
+  }
+
+  // Only new accounts get the length check — enforcing it before sign-in
+  // would lock out any existing account with a shorter password.
+  if (password.length < 6) {
+    fail("Password must be at least 6 characters.", next);
   }
 
   const signUp = await supabase.auth.signUp({ email, password });
