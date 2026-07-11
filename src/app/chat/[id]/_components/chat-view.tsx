@@ -40,8 +40,6 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
     setReplyTargetId((prev) => (prev === id ? null : id));
   }, []);
 
-  const clearReplyTarget = () => setReplyTargetId(null);
-
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -273,7 +271,6 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
           onOptimistic={addOptimisticMessage}
           onReconcile={reconcileMessageId}
           replyTarget={replyTarget}
-          onClearReplyTarget={clearReplyTarget}
         />
       </Footer>
     </Shell>
