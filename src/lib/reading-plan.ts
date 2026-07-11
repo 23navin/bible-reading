@@ -3,7 +3,7 @@
 // there (`npm run seed:plans`). The user's selected plan is
 // profiles.reading_plan_id.
 
-import { parseReferenceInput } from "./passage";
+import { parseReferenceInput, resolveBook } from "./passage";
 
 export type ReadingPlan = {
   id: string;
@@ -84,7 +84,7 @@ export function bibleComUrl(
 ): string | null {
   const b = parseReference(entry.begin_chapter);
   const e = parseReference(entry.end_chapter);
-  const code = USFM_BOOK_CODES[normalizeBook(b.book)];
+  const code = resolveBook(b.book)?.usfm;
   if (!code) return null;
   const chapter = b.chapter ?? 1; // single-chapter books like Jude
   let ref = `${code}.${chapter}`;
@@ -108,7 +108,7 @@ export function bibleComUrlForReference(
   if (!checked.ok) return null;
   const p = checked.passage;
   if (!p.book) return null;
-  const code = USFM_BOOK_CODES[normalizeBook(p.book)];
+  const code = resolveBook(p.book)?.usfm;
   if (!code) return null;
   let ref = `${code}.${p.chapter ?? 1}`;
   if (p.verse_start != null) {
@@ -117,32 +117,6 @@ export function bibleComUrlForReference(
   }
   return `https://www.bible.com/bible/${bibleComVersionId(translation)}/${ref}`;
 }
-
-function normalizeBook(book: string): string {
-  const key = book.toLowerCase().replace(/\s+/g, " ").trim();
-  return key === "psalm" ? "psalms" : key === "song of songs" ? "song of solomon" : key;
-}
-
-const USFM_BOOK_CODES: Record<string, string> = {
-  genesis: "GEN", exodus: "EXO", leviticus: "LEV", numbers: "NUM",
-  deuteronomy: "DEU", joshua: "JOS", judges: "JDG", ruth: "RUT",
-  "1 samuel": "1SA", "2 samuel": "2SA", "1 kings": "1KI", "2 kings": "2KI",
-  "1 chronicles": "1CH", "2 chronicles": "2CH", ezra: "EZR", nehemiah: "NEH",
-  esther: "EST", job: "JOB", psalms: "PSA", proverbs: "PRO",
-  ecclesiastes: "ECC", "song of solomon": "SNG", isaiah: "ISA",
-  jeremiah: "JER", lamentations: "LAM", ezekiel: "EZK", daniel: "DAN",
-  hosea: "HOS", joel: "JOL", amos: "AMO", obadiah: "OBA", jonah: "JON",
-  micah: "MIC", nahum: "NAM", habakkuk: "HAB", zephaniah: "ZEP",
-  haggai: "HAG", zechariah: "ZEC", malachi: "MAL",
-  matthew: "MAT", mark: "MRK", luke: "LUK", john: "JHN", acts: "ACT",
-  romans: "ROM", "1 corinthians": "1CO", "2 corinthians": "2CO",
-  galatians: "GAL", ephesians: "EPH", philippians: "PHP",
-  colossians: "COL", "1 thessalonians": "1TH", "2 thessalonians": "2TH",
-  "1 timothy": "1TI", "2 timothy": "2TI", titus: "TIT", philemon: "PHM",
-  hebrews: "HEB", james: "JAS", "1 peter": "1PE", "2 peter": "2PE",
-  "1 john": "1JN", "2 john": "2JN", "3 john": "3JN", jude: "JUD",
-  revelation: "REV",
-};
 
 // Progress lives in reading_plan_progress: one row per completed plan day,
 // optionally linked to the message that completed it. Rows are written by a
