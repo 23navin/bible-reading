@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import VoiceReview from "./voice-review";
 import TextComposer from "./text-composer";
 import { createChat } from "@/app/_actions/create-chat";
@@ -50,9 +50,18 @@ export default function HomeView({
     setCreatingChat(false);
     setMode("text");
   };
+  // The close animation timer must not fire setState after unmount
+  // (e.g. navigating away mid-close).
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    },
+    [],
+  );
   const closeOverlay = () => {
     setExiting(true);
-    setTimeout(() => {
+    closeTimerRef.current = setTimeout(() => {
       setMode("idle");
       setBlob(null);
       setExiting(false);

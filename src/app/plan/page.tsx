@@ -27,7 +27,7 @@ import { setReadingPlan } from "./_actions/set-reading-plan";
 
 export const dynamic = "force-dynamic";
 
-type PlanRow = ReadingPlan & { reading_plan_entries: { count: number }[] };
+type PlanRow = ReadingPlan;
 
 type EntryRow = Pick<ReadingPlanEntry, "date" | "begin_chapter" | "end_chapter">;
 
@@ -123,7 +123,7 @@ async function loadPlanData(cookiePlanId: string | null | undefined): Promise<Pl
         .maybeSingle(),
       supabase
         .from("reading_plans")
-        .select("id, display_name, description, reading_plan_entries(count)")
+        .select("id, display_name, description")
         .order("display_name"),
       supabase.from("chat_members").select(MEMBERSHIPS_SELECT).eq("user_id", user.id),
     ]);
@@ -261,7 +261,6 @@ async function PlanContent({ dataPromise }: { dataPromise: Promise<PlanData> }) 
             key={plan.id}
             id={plan.id}
             name={plan.display_name}
-            detail={`${plan.reading_plan_entries[0]?.count ?? 0} days`}
             description={plan.description}
             selected={selectedId === plan.id}
           />
@@ -403,13 +402,11 @@ function EntryCard({
 function PlanOption({
   id,
   name,
-  detail,
   description,
   selected,
 }: {
   id: string;
   name: string;
-  detail?: string;
   description?: string | null;
   selected: boolean;
 }) {
