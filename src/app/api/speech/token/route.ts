@@ -1,12 +1,22 @@
 import { NextResponse } from "next/server";
+import { getApiUser } from "@/lib/auth/api";
+
+export const maxDuration = 15;
 
 const MP_URL = "https://mp.speechmatics.com/v1/api_keys?type=rt";
 
 export async function POST() {
-  const apiKey = process.env.SPEECHMATIC_API_KEY;
+  const user = await getApiUser();
+  if (!user) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  // Historical misspelling: the env var was created as SPEECHMATIC_API_KEY.
+  // Prefer the corrected name; drop the fallback once Vercel env is renamed.
+  const apiKey = process.env.SPEECHMATICS_API_KEY ?? process.env.SPEECHMATIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "SPEECHMATIC_API_KEY not configured" },
+      { error: "SPEECHMATICS_API_KEY not configured" },
       { status: 500 },
     );
   }

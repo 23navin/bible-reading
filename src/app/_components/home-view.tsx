@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import VoiceReview from "./voice-review";
 import TextComposer from "./text-composer";
 import { createChat } from "@/app/_actions/create-chat";
 import { useVoiceRecorder } from "@/lib/audio/use-voice-recorder";
 import { Shell, Header, Body, Footer } from "@/components/shell";
 import { Avatar, AvatarStack } from "@/components/avatar";
-import { CloseIcon } from "@/components/icons";
+import { CloseIcon, KeyboardIcon } from "@/components/icons";
 import { formatChatTimestamp, formatElapsed, formatPlanDate } from "@/lib/format";
 import { useHydrated } from "@/components/local-time";
 import type { ChatSummary, Me } from "@/lib/types";
@@ -20,10 +20,12 @@ export default function HomeView({
   me,
   chats,
   nextReading,
+  error,
 }: {
   me: Me;
   chats: ChatSummary[];
   nextReading: NextReading | null;
+  error?: string | null;
 }) {
   const [mode, setMode] = useState<Mode>("idle");
   const [blob, setBlob] = useState<Blob | null>(null);
@@ -48,9 +50,18 @@ export default function HomeView({
     setCreatingChat(false);
     setMode("text");
   };
+  // The close animation timer must not fire setState after unmount
+  // (e.g. navigating away mid-close).
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    },
+    [],
+  );
   const closeOverlay = () => {
     setExiting(true);
-    setTimeout(() => {
+    closeTimerRef.current = setTimeout(() => {
       setMode("idle");
       setBlob(null);
       setExiting(false);
@@ -105,6 +116,8 @@ export default function HomeView({
             </p>
           </div>
         ) : (
+          <>
+          {error ? <p className="pt-4 text-sm text-red-400">{error}</p> : null}
           <ul
             className={`flex flex-col gap-1 py-4 ${
               overlayActive ? "" : "screen-fade-in"
@@ -175,6 +188,7 @@ export default function HomeView({
               )}
             </li>
           </ul>
+          </>
         )}
       </Body>
 
@@ -283,24 +297,6 @@ function UnreadDot({ active, className = "" }: { active: boolean; className?: st
         active ? "bg-blue-500" : "bg-transparent"
       } ${className}`}
     />
-  );
-}
-
-function KeyboardIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <rect x="2" y="6" width="20" height="13" rx="2" />
-      <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14.5h10" />
-    </svg>
   );
 }
 

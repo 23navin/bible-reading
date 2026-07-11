@@ -2,16 +2,13 @@
 
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
-import { createServerSupabase } from "@/lib/db/server";
-import { getAuthUser } from "@/lib/auth/user";
+import { requireUser } from "@/lib/auth/session";
 
 export async function createChat(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) redirect("/?error=Name+required");
 
-  const supabase = await createServerSupabase();
-  const user = await getAuthUser(supabase);
-  if (!user) redirect("/login");
+  const { supabase, user } = await requireUser();
 
   // Generate the id locally so we don't need INSERT ... RETURNING, which would
   // require the SELECT RLS policy to make the new chat visible to its creator —

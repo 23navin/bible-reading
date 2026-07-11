@@ -3,8 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createServerSupabase } from "@/lib/db/server";
-import { getAuthUser } from "@/lib/auth/user";
+import { requireUser } from "@/lib/auth/session";
 import {
   PROFILE_COOKIE,
   profileCookieOptions,
@@ -16,14 +15,15 @@ export async function setDisplayName(rawName: string) {
   const name = rawName.trim().slice(0, 32);
   if (!name) return;
 
-  const supabase = await createServerSupabase();
-  const user = await getAuthUser(supabase);
-  if (!user) redirect("/login");
+  const { supabase, user } = await requireUser();
 
-  await supabase
+  const { error } = await supabase
     .from("profiles")
     .update({ display_name: name })
     .eq("id", user.id);
+  if (error) {
+    redirect(`/account?error=${encodeURIComponent(error.message)}`);
+  }
 
   // Headers render the name from the profile cookie, so keep it in sync
   // (preserving the cached planId, which this action doesn't touch).

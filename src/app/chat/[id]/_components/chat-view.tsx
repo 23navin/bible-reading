@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/db/client";
 import { signAudioPath } from "@/lib/audio/storage";
 import type { Member, Message, Profile, Reaction, Reply } from "@/lib/types";
 import { AvatarStack } from "@/components/avatar";
 import { Shell, Header, Body, Footer } from "@/components/shell";
+import { ChevronLeftIcon } from "@/components/icons";
 import { useHydrated } from "@/components/local-time";
+import { dayKey, formatDateDivider } from "@/lib/format";
 import MessageBubble from "./message-bubble";
 import Composer from "./composer";
 
@@ -19,28 +21,6 @@ type Props = {
   initialMessages: Message[];
   translation: string | null;
 };
-
-function formatDateDivider(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const dayMs = 24 * 60 * 60 * 1000;
-  const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / dayMs);
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  const sameYear = d.getFullYear() === now.getFullYear();
-  return d.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    ...(sameYear ? {} : { year: "numeric" }),
-  });
-}
-
-function dayKey(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-}
 
 export default function ChatView({ chatId, chatName, members, currentUserId, initialMessages, translation }: Props) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
@@ -55,11 +35,10 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
     ? messages.find((m) => m.id === replyTargetId) ?? null
     : null;
 
-  const toggleReplyTarget = (id: string) => {
+  // Stable identity so React.memo on MessageBubble holds across list updates.
+  const toggleReplyTarget = useCallback((id: string) => {
     setReplyTargetId((prev) => (prev === id ? null : id));
-  };
-
-  const clearReplyTarget = () => setReplyTargetId(null);
+  }, []);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -67,15 +46,6 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
   }, [messages.length]);
 
   useEffect(() => {
-    const fetchProfile = async (userId: string): Promise<Profile | null> => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, display_name")
-        .eq("id", userId)
-        .maybeSingle();
-      return (data as Profile | null) ?? null;
-    };
-
     const fetchMessage = async (messageId: string): Promise<Message | null> => {
       const { data } = await supabase
         .from("messages")
@@ -122,9 +92,52 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
           setMessages((prev) => prev.filter((m) => m.id !== messageId));
         },
       )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [chatId, supabase]);
+
+  // Reactions/replies arrive on a second channel scoped to the messages on
+  // screen. Realtime INSERT filters only support `in.(...)` with up to 100
+  // values, so subscribe to the newest 100 real (non-optimistic) message ids;
+  // reactions on anything older don't update live (a reload still shows
+  // them). The channel resubscribes when the id set changes (new message) —
+  // a sub-second gap, acceptable at this app's traffic. At larger scale,
+  // switch to realtime.broadcast_changes() fan-out per chat topic.
+  const messageIdKey = useMemo(
+    () =>
+      messages
+        .map((m) => m.id)
+        .filter((id) => !id.startsWith("tmp-"))
+        .slice(-100)
+        .join(","),
+    [messages],
+  );
+
+  useEffect(() => {
+    if (!messageIdKey) return;
+
+    const fetchProfile = async (userId: string): Promise<Profile | null> => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, display_name")
+        .eq("id", userId)
+        .maybeSingle();
+      return (data as Profile | null) ?? null;
+    };
+
+    const channel = supabase
+      .channel(`chat-meta:${chatId}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "reactions" },
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "reactions",
+          filter: `message_id=in.(${messageIdKey})`,
+        },
         (payload) => {
           const r = payload.new as Reaction;
           setMessages((prev) =>
@@ -138,6 +151,8 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
       )
       .on(
         "postgres_changes",
+        // Supabase realtime cannot filter DELETE events, so this one stays
+        // table-wide and matches by message id client-side.
         { event: "DELETE", schema: "public", table: "reactions" },
         (payload) => {
           const r = payload.old as Reaction;
@@ -157,7 +172,12 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
       )
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "replies" },
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "replies",
+          filter: `message_id=in.(${messageIdKey})`,
+        },
         async (payload) => {
           const r = payload.new as Reply;
           const profile = await fetchProfile(r.user_id);
@@ -175,7 +195,7 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [chatId, supabase]);
+  }, [chatId, supabase, messageIdKey]);
 
   const addOptimisticMessage = (m: Message) => {
     setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
@@ -251,26 +271,8 @@ export default function ChatView({ chatId, chatName, members, currentUserId, ini
           onOptimistic={addOptimisticMessage}
           onReconcile={reconcileMessageId}
           replyTarget={replyTarget}
-          onClearReplyTarget={clearReplyTarget}
         />
       </Footer>
     </Shell>
-  );
-}
-
-function ChevronLeftIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <path d="M15 18L9 12l6-6" />
-    </svg>
   );
 }

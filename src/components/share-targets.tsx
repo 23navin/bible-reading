@@ -1,8 +1,23 @@
 "use client";
 
+import { useState } from "react";
 import type { ChatSummary } from "@/lib/types";
 import { AvatarStack } from "./avatar";
 import { CheckIcon } from "./icons";
+
+// Selection state for the list below — every composer pairs them.
+export function useShareTargets() {
+  const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(new Set());
+  const toggleChat = (id: string) => {
+    setSelectedChatIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  return { selectedChatIds, toggleChat };
+}
 
 export function ShareTargets({
   chats,

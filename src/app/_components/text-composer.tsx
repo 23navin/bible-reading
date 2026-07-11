@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/db/client";
-import { DiscardButton } from "@/components/discard-button";
-import { ShareTargets } from "@/components/share-targets";
+import { insertLogWithShares } from "@/lib/db/insert-log";
+import { LogSheet } from "@/components/log-sheet";
+import { useShareTargets } from "@/components/share-targets";
 import { parseReferenceInput } from "@/lib/passage";
 import type { ChatSummary, Me } from "@/lib/types";
 
@@ -26,18 +27,9 @@ export default function TextComposer({
   const [supabase] = useState(() => createClient());
   const [text, setText] = useState("");
   const [reference, setReference] = useState<string | null>(initialReference);
-  const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(new Set());
+  const { selectedChatIds, toggleChat } = useShareTargets();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  function toggleChat(id: string) {
-    setSelectedChatIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
 
   async function send() {
     if (!text.trim()) return;
@@ -53,35 +45,17 @@ export default function TextComposer({
     setSending(true);
     setError(null);
     try {
-      const { data: inserted, error: insErr } = await supabase
-        .from("messages")
-        .insert({
-          user_id: me.id,
+      await insertLogWithShares(
+        supabase,
+        {
+          userId: me.id,
           note: text,
-          voice_path: null,
           transcript: null,
-          reference: passage.reference,
-          book: passage.book,
-          chapter: passage.chapter,
-          verse_start: passage.verse_start,
-          verse_end: passage.verse_end,
-          created_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        })
-        .select("id")
-        .single();
-      if (insErr || !inserted) throw insErr ?? new Error("insert failed");
-
-      if (selectedChatIds.size > 0) {
-        const shareRows = Array.from(selectedChatIds).map((chat_id) => ({
-          message_id: inserted.id,
-          chat_id,
-          shared_by: me.id,
-        }));
-        const { error: shareErr } = await supabase
-          .from("message_shares")
-          .insert(shareRows);
-        if (shareErr) throw shareErr;
-      }
+          voicePath: null,
+          passage,
+        },
+        selectedChatIds,
+      );
 
       // The insert's DB trigger may have marked a plan day complete, so
       // re-fetch the server-rendered next reading (and chat timestamps).
@@ -97,64 +71,46 @@ export default function TextComposer({
   }
 
   return (
-    <div
-      className={`absolute inset-0 z-30 flex flex-col bg-neutral-900 text-neutral-100 ${
-        exiting ? "screen-fade-out" : "screen-fade-in"
-      }`}
+    <LogSheet
+      exiting={exiting}
+      onClose={onClose}
+      chats={chats}
+      selected={selectedChatIds}
+      onToggle={toggleChat}
+      error={error}
+      submitLabel={sending ? "Logging…" : "Log Reading"}
+      submitDisabled={sending || !text.trim()}
+      onSubmit={send}
     >
-      <header className="flex items-center justify-end px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
-        <DiscardButton onDiscard={onClose} />
-      </header>
-
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 pb-4">
-        <div className="rounded-2xl bg-neutral-800 px-4 py-2.5">
-          <div className="flex items-center gap-3">
-            <span
-              aria-hidden
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20"
-            >
-              <span className="translate-x-[-0.5px] font-mono text-base italic text-white">
-                t
-              </span>
+      <div className="rounded-2xl bg-neutral-800 px-4 py-2.5">
+        <div className="flex items-center gap-3">
+          <span
+            aria-hidden
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20"
+          >
+            <span className="translate-x-[-0.5px] font-mono text-base italic text-white">
+              t
             </span>
-            <input
-              type="text"
-              value={reference ?? ""}
-              onChange={(e) => {
-                setReference(e.target.value);
-                setError(null);
-              }}
-              placeholder="Passage Reference"
-              className="min-w-0 flex-1 bg-transparent text-left text-sm font-semibold text-neutral-100 placeholder:text-neutral-500 outline-none"
-            />
-          </div>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Your thoughts..."
-            rows={6}
-            className="mt-2 w-full resize-none bg-transparent text-[15px] text-neutral-100 placeholder:text-neutral-500 outline-none"
+          </span>
+          <input
+            type="text"
+            value={reference ?? ""}
+            onChange={(e) => {
+              setReference(e.target.value);
+              setError(null);
+            }}
+            placeholder="Passage Reference"
+            className="min-w-0 flex-1 bg-transparent text-left text-sm font-semibold text-neutral-100 placeholder:text-neutral-500 outline-none"
           />
         </div>
-
-        <ShareTargets
-          chats={chats}
-          selected={selectedChatIds}
-          onToggle={toggleChat}
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Your thoughts..."
+          rows={6}
+          className="mt-2 w-full resize-none bg-transparent text-[15px] text-neutral-100 placeholder:text-neutral-500 outline-none"
         />
-
-        {error ? <p className="text-sm text-red-400">{error}</p> : null}
-
-        <div className="mt-auto flex gap-2 pt-2">
-          <button
-            onClick={send}
-            disabled={sending || !text.trim()}
-            className="flex h-20 w-full items-center justify-center rounded-md bg-neutral-300 font-semibold text-neutral-800 active:bg-blue-500/10 disabled:opacity-50"
-          >
-            {sending ? "Logging…" : "Log Reading"}
-          </button>
-        </div>
       </div>
-    </div>
+    </LogSheet>
   );
 }

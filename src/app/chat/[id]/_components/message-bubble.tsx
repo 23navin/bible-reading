@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useRef, useState } from "react";
 import { createClient } from "@/lib/db/client";
 import type { Message } from "@/lib/types";
 import LocalTime from "@/components/local-time";
+import { AudioPlayButton } from "@/components/audio-play-button";
+import { HeartIcon, ReplyArrowIcon } from "@/components/icons";
 import { bibleComUrlForReference } from "@/lib/reading-plan";
 
 type Props = {
@@ -18,7 +20,12 @@ type Props = {
 const SWIPE_THRESHOLD = 50;
 const SWIPE_MAX = 80;
 
-export default function MessageBubble({
+// memo: a realtime update rebuilds the messages array, but only the touched
+// message gets a new object identity — the other bubbles skip re-rendering
+// (toggleReplyTarget is a stable useCallback upstream).
+export default memo(MessageBubble);
+
+function MessageBubble({
   message,
   isMine,
   currentUserId,
@@ -26,45 +33,15 @@ export default function MessageBubble({
   onToggleReplyTarget,
   translation,
 }: Props) {
-  const supabase = createClient();
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [supabase] = useState(() => createClient());
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const swipeFiredRef = useRef(false);
   const doubleTapFiredRef = useRef(false);
   const lastTapAtRef = useRef(0);
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const gestureRef = useRef<"pending" | "swipe" | "scroll" | null>(null);
   const DOUBLE_TAP_MS = 300;
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
-    const onEnded = () => setIsPlaying(false);
-    audio.addEventListener("play", onPlay);
-    audio.addEventListener("pause", onPause);
-    audio.addEventListener("ended", onEnded);
-    return () => {
-      audio.removeEventListener("play", onPlay);
-      audio.removeEventListener("pause", onPause);
-      audio.removeEventListener("ended", onEnded);
-    };
-  }, [message.voice_signed_url]);
-
-  const togglePlay = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (audio.paused) {
-      audio.play().catch((err) => {
-        console.error("audio play failed", err);
-      });
-    } else {
-      audio.pause();
-    }
-  };
 
   const heart = (message.reactions ?? []).find(
     (r) => r.user_id === currentUserId && r.emoji === "❤️",
@@ -207,9 +184,7 @@ export default function MessageBubble({
               transition: isSwiping ? "none" : "opacity 0.2s ease-out",
             }}
           >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
-              <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" />
-            </svg>
+            <ReplyArrowIcon className="h-4 w-4" />
           </span>
           {heartCount > 0 || replyCount > 0 ? (
             <div
@@ -223,14 +198,7 @@ export default function MessageBubble({
                     heartCount > 1 ? "min-w-6 px-1.5" : "w-6"
                   }`}
                 >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    className="h-4 w-4 text-rose-500"
-                    aria-hidden
-                  >
-                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                  </svg>
+                  <HeartIcon className="h-4 w-4 text-rose-500" />
                   {heartCount > 1 ? (
                     <span className="font-medium text-neutral-600">{heartCount}</span>
                   ) : null}
@@ -249,14 +217,7 @@ export default function MessageBubble({
                     heartCount > 0 ? "-ml-1.5" : ""
                   }`}
                 >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    className="h-3 w-3 text-neutral-500"
-                    aria-hidden
-                  >
-                    <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" />
-                  </svg>
+                  <ReplyArrowIcon className="h-3 w-3 text-neutral-500" />
                   <span className="font-medium text-neutral-600">{replyCount}</span>
                 </button>
               ) : null}
@@ -265,26 +226,14 @@ export default function MessageBubble({
           {body || reference ? (
             <div className="flex items-center gap-3">
               {hasAudio ? (
-                <button
-                  onClick={togglePlay}
-                  aria-label={isPlaying ? "Pause audio" : "Play audio"}
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full active:scale-95 ${
+                <AudioPlayButton
+                  src={message.voice_signed_url}
+                  className={
                     isMine
                       ? "bg-white/20 text-white"
                       : "bg-neutral-300/70 text-neutral-700"
-                  }`}
-                >
-                  {isPlaying ? (
-                    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
-                      <rect x="6" y="5" width="4" height="14" rx="1" />
-                      <rect x="14" y="5" width="4" height="14" rx="1" />
-                    </svg>
-                  ) : (
-                    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
-                      <path d="M8 5v14l12-7z" />
-                    </svg>
-                  )}
-                </button>
+                  }
+                />
               ) : (
                 <span
                   aria-hidden
@@ -326,14 +275,6 @@ export default function MessageBubble({
             <p className="mt-2 whitespace-pre-wrap text-[15px] leading-snug">
               {body}
             </p>
-          ) : null}
-          {hasAudio ? (
-            <audio
-              ref={audioRef}
-              src={message.voice_signed_url ?? undefined}
-              preload="none"
-              className="hidden"
-            />
           ) : null}
         </div>
       </div>

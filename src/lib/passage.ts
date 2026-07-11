@@ -20,27 +20,57 @@ export function applyReferenceReplacement(
   return text.replace(passage.matched_text, passage.reference);
 }
 
-// Canonical Protestant canon with chapter counts, for validating typed
-// references. Lowercased names must match reading_plan_entries.book_key
-// (Postgres normalize_book), or logs won't count toward reading plans.
-const BIBLE_BOOKS: [name: string, chapters: number][] = [
-  ["Genesis", 50], ["Exodus", 40], ["Leviticus", 27], ["Numbers", 36],
-  ["Deuteronomy", 34], ["Joshua", 24], ["Judges", 21], ["Ruth", 4],
-  ["1 Samuel", 31], ["2 Samuel", 24], ["1 Kings", 22], ["2 Kings", 25],
-  ["1 Chronicles", 29], ["2 Chronicles", 36], ["Ezra", 10], ["Nehemiah", 13],
-  ["Esther", 10], ["Job", 42], ["Psalms", 150], ["Proverbs", 31],
-  ["Ecclesiastes", 12], ["Song of Solomon", 8], ["Isaiah", 66],
-  ["Jeremiah", 52], ["Lamentations", 5], ["Ezekiel", 48], ["Daniel", 12],
-  ["Hosea", 14], ["Joel", 3], ["Amos", 9], ["Obadiah", 1], ["Jonah", 4],
-  ["Micah", 7], ["Nahum", 3], ["Habakkuk", 3], ["Zephaniah", 3],
-  ["Haggai", 2], ["Zechariah", 14], ["Malachi", 4],
-  ["Matthew", 28], ["Mark", 16], ["Luke", 24], ["John", 21], ["Acts", 28],
-  ["Romans", 16], ["1 Corinthians", 16], ["2 Corinthians", 13],
-  ["Galatians", 6], ["Ephesians", 6], ["Philippians", 4], ["Colossians", 4],
-  ["1 Thessalonians", 5], ["2 Thessalonians", 3], ["1 Timothy", 6],
-  ["2 Timothy", 4], ["Titus", 3], ["Philemon", 1], ["Hebrews", 13],
-  ["James", 5], ["1 Peter", 5], ["2 Peter", 3], ["1 John", 5],
-  ["2 John", 1], ["3 John", 1], ["Jude", 1], ["Revelation", 22],
+export type BibleBook = {
+  name: string;
+  chapters: number;
+  usfm: string; // 3-letter USFM code, used for bible.com deep links
+};
+
+// Canonical Protestant canon — the single source of truth for book names,
+// chapter counts, and USFM codes. Lowercased names must match
+// reading_plan_entries.book_key (Postgres normalize_book), or logs won't
+// count toward reading plans.
+const BOOK = (name: string, chapters: number, usfm: string): BibleBook => ({
+  name,
+  chapters,
+  usfm,
+});
+
+export const BIBLE_BOOKS: BibleBook[] = [
+  BOOK("Genesis", 50, "GEN"), BOOK("Exodus", 40, "EXO"),
+  BOOK("Leviticus", 27, "LEV"), BOOK("Numbers", 36, "NUM"),
+  BOOK("Deuteronomy", 34, "DEU"), BOOK("Joshua", 24, "JOS"),
+  BOOK("Judges", 21, "JDG"), BOOK("Ruth", 4, "RUT"),
+  BOOK("1 Samuel", 31, "1SA"), BOOK("2 Samuel", 24, "2SA"),
+  BOOK("1 Kings", 22, "1KI"), BOOK("2 Kings", 25, "2KI"),
+  BOOK("1 Chronicles", 29, "1CH"), BOOK("2 Chronicles", 36, "2CH"),
+  BOOK("Ezra", 10, "EZR"), BOOK("Nehemiah", 13, "NEH"),
+  BOOK("Esther", 10, "EST"), BOOK("Job", 42, "JOB"),
+  BOOK("Psalms", 150, "PSA"), BOOK("Proverbs", 31, "PRO"),
+  BOOK("Ecclesiastes", 12, "ECC"), BOOK("Song of Solomon", 8, "SNG"),
+  BOOK("Isaiah", 66, "ISA"), BOOK("Jeremiah", 52, "JER"),
+  BOOK("Lamentations", 5, "LAM"), BOOK("Ezekiel", 48, "EZK"),
+  BOOK("Daniel", 12, "DAN"), BOOK("Hosea", 14, "HOS"),
+  BOOK("Joel", 3, "JOL"), BOOK("Amos", 9, "AMO"),
+  BOOK("Obadiah", 1, "OBA"), BOOK("Jonah", 4, "JON"),
+  BOOK("Micah", 7, "MIC"), BOOK("Nahum", 3, "NAM"),
+  BOOK("Habakkuk", 3, "HAB"), BOOK("Zephaniah", 3, "ZEP"),
+  BOOK("Haggai", 2, "HAG"), BOOK("Zechariah", 14, "ZEC"),
+  BOOK("Malachi", 4, "MAL"),
+  BOOK("Matthew", 28, "MAT"), BOOK("Mark", 16, "MRK"),
+  BOOK("Luke", 24, "LUK"), BOOK("John", 21, "JHN"),
+  BOOK("Acts", 28, "ACT"), BOOK("Romans", 16, "ROM"),
+  BOOK("1 Corinthians", 16, "1CO"), BOOK("2 Corinthians", 13, "2CO"),
+  BOOK("Galatians", 6, "GAL"), BOOK("Ephesians", 6, "EPH"),
+  BOOK("Philippians", 4, "PHP"), BOOK("Colossians", 4, "COL"),
+  BOOK("1 Thessalonians", 5, "1TH"), BOOK("2 Thessalonians", 3, "2TH"),
+  BOOK("1 Timothy", 6, "1TI"), BOOK("2 Timothy", 4, "2TI"),
+  BOOK("Titus", 3, "TIT"), BOOK("Philemon", 1, "PHM"),
+  BOOK("Hebrews", 13, "HEB"), BOOK("James", 5, "JAS"),
+  BOOK("1 Peter", 5, "1PE"), BOOK("2 Peter", 3, "2PE"),
+  BOOK("1 John", 5, "1JN"), BOOK("2 John", 1, "2JN"),
+  BOOK("3 John", 1, "3JN"), BOOK("Jude", 1, "JUD"),
+  BOOK("Revelation", 22, "REV"),
 ];
 
 const BOOK_ALIASES: Record<string, string> = {
@@ -48,10 +78,10 @@ const BOOK_ALIASES: Record<string, string> = {
   "song of songs": "song of solomon",
 };
 
-// "1st cor" / "First Corinthians" / "I Cor." -> the canonical [name, chapters]
-// entry. Unambiguous prefixes are accepted ("psa" -> Psalms); ambiguous ones
+// "1st cor" / "First Corinthians" / "I Cor." -> the canonical BibleBook.
+// Unambiguous prefixes are accepted ("psa" -> Psalms); ambiguous ones
 // ("jud" -> Judges or Jude) are not.
-function resolveBook(input: string): [string, number] | null {
+export function resolveBook(input: string): BibleBook | null {
   let key = input.toLowerCase().replace(/\./g, "").replace(/\s+/g, " ").trim();
   key = key
     .replace(/^(?:1st|first|i)\s/, "1 ")
@@ -59,10 +89,10 @@ function resolveBook(input: string): [string, number] | null {
     .replace(/^(?:3rd|third|iii)\s/, "3 ");
   key = BOOK_ALIASES[key] ?? key;
   if (!key) return null;
-  const exact = BIBLE_BOOKS.find(([name]) => name.toLowerCase() === key);
+  const exact = BIBLE_BOOKS.find((b) => b.name.toLowerCase() === key);
   if (exact) return exact;
-  const prefixed = BIBLE_BOOKS.filter(([name]) =>
-    name.toLowerCase().startsWith(key),
+  const prefixed = BIBLE_BOOKS.filter((b) =>
+    b.name.toLowerCase().startsWith(key),
   );
   return prefixed.length === 1 ? prefixed[0] : null;
 }
@@ -92,7 +122,7 @@ export function parseReferenceInput(input: string): ReferenceCheck {
       error: `Couldn't recognize "${bookInput}" as a book of the Bible.`,
     };
   }
-  const [book, chapterCount] = resolved;
+  const { name: book, chapters: chapterCount } = resolved;
   const n1 = m?.[2] ? Number(m[2]) : null; // number after the book
   const verse = m?.[3] ? Number(m[3]) : null; // number after ":"
   const n2 = m?.[4] ? Number(m[4]) : null; // number after "-"

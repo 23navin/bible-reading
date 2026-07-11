@@ -1,13 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/db/client";
-import { SpeechmaticsSession } from "@/lib/speech/speechmatics";
+import { insertLogWithShares, uploadVoiceBlob, voiceExtension } from "@/lib/db/insert-log";
+import { useVoiceRecorder } from "@/lib/audio/use-voice-recorder";
 import { applyReferenceReplacement, type ParsedPassage } from "@/lib/passage";
 import type { Message } from "@/lib/types";
-
-// Assumes a public Supabase Storage bucket named "voice-memos".
-const VOICE_BUCKET = "audio-memos";
 
 type Props = {
   chatId: string;
@@ -15,7 +13,6 @@ type Props = {
   onOptimistic: (m: Message) => void;
   onReconcile: (optimisticId: string, realId: string) => void;
   replyTarget: Message | null;
-  onClearReplyTarget: () => void;
 };
 
 async function parsePassage(text: string): Promise<ParsedPassage> {
@@ -34,7 +31,10 @@ async function parsePassage(text: string): Promise<ParsedPassage> {
 
 async function transcribe(blob: Blob): Promise<string> {
   const fd = new FormData();
-  fd.append("file", new File([blob], "memo.webm", { type: blob.type || "audio/webm" }));
+  fd.append(
+    "file",
+    new File([blob], `memo.${voiceExtension(blob)}`, { type: blob.type || "audio/webm" }),
+  );
   const res = await fetch("/api/speech/transcribe", { method: "POST", body: fd });
   if (!res.ok) throw new Error("transcribe failed");
   const { text } = (await res.json()) as { text: string };
@@ -47,112 +47,64 @@ export default function Composer({
   onOptimistic,
   onReconcile,
   replyTarget,
-  onClearReplyTarget,
 }: Props) {
   const [supabase] = useState(() => createClient());
   const [text, setText] = useState("");
-  const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const sessionRef = useRef<SpeechmaticsSession | null>(null);
-  const finalTextRef = useRef("");
+  const [error, setError] = useState<string | null>(null);
+  // Recording finished but the realtime session may still be streaming
+  // finals — the send effect below waits for it to settle.
+  const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
   const parsedRef = useRef<ParsedPassage | null>(null);
   const parseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const realtimeFailedRef = useRef(false);
+  const latestTranscriptRef = useRef("");
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Voice memos are mono speech — 32 kbps keeps files small (storage
-      // egress is billed) and Safari treats this as a hint it may ignore.
-      const rec = new MediaRecorder(stream, { audioBitsPerSecond: 32_000 });
-      chunksRef.current = [];
-      finalTextRef.current = "";
-      parsedRef.current = null;
-      realtimeFailedRef.current = false;
-      rec.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      rec.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" });
-        await sendVoice(blob);
-      };
-      rec.start();
-      recorderRef.current = rec;
-      setRecording(true);
+  // The chat composer has no review screen: the recorder hands the blob here
+  // and the memo sends itself once transcription settles.
+  const recorder = useVoiceRecorder({
+    onReview: (blob) => setPendingBlob(blob),
+  });
 
-      const session = new SpeechmaticsSession({
-        onFinal: (full) => {
-          finalTextRef.current = full;
-          if (parsedRef.current?.reference) return;
-          if (parseTimerRef.current) clearTimeout(parseTimerRef.current);
-          parseTimerRef.current = setTimeout(async () => {
-            const t = finalTextRef.current.trim();
-            if (!t || parsedRef.current?.reference) return;
-            const p = await parsePassage(t);
-            if (p.reference) parsedRef.current = p;
-          }, 500);
-        },
-        onError: (err) => {
-          console.error("speechmatics error", err);
-          realtimeFailedRef.current = true;
-        },
-      });
-      try {
-        await session.start(stream);
-        sessionRef.current = session;
-      } catch (err) {
-        console.error("speechmatics start failed", err);
-        realtimeFailedRef.current = true;
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Microphone access denied.");
-    }
+  // Parse the passage on a 500ms debounce while the transcript streams, so
+  // the reference is usually already known by the time the memo is sent.
+  // First hit wins — later transcript growth doesn't re-parse.
+  useEffect(() => {
+    const t = recorder.realtimeTranscript ?? "";
+    latestTranscriptRef.current = t;
+    if (!t.trim() || parsedRef.current?.reference) return;
+    if (parseTimerRef.current) clearTimeout(parseTimerRef.current);
+    parseTimerRef.current = setTimeout(async () => {
+      const current = latestTranscriptRef.current.trim();
+      if (!current || parsedRef.current?.reference) return;
+      const p = await parsePassage(current);
+      if (p.reference) parsedRef.current = p;
+    }, 500);
+    return () => {
+      if (parseTimerRef.current) clearTimeout(parseTimerRef.current);
+    };
+  }, [recorder.realtimeTranscript]);
+
+  const startRecording = () => {
+    parsedRef.current = null;
+    setError(null);
+    recorder.start();
   };
 
-  const stopRecording = () => {
-    recorderRef.current?.stop();
-    recorderRef.current = null;
-    setRecording(false);
-  };
-
-  const sendVoice = async (blob: Blob) => {
+  const sendVoice = async (blob: Blob, realtimeText: string | null) => {
     setBusy(true);
+    setError(null);
     try {
-      const ext = blob.type.includes("mp4") ? "m4a" : "webm";
-      const path = `${currentUserId}/${crypto.randomUUID()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from(VOICE_BUCKET)
-        .upload(path, blob, { contentType: blob.type, upsert: false });
-      if (upErr) throw upErr;
-
-      const session = sessionRef.current;
-      sessionRef.current = null;
-      if (session && !realtimeFailedRef.current) {
-        try {
-          const finalText = await session.stop();
-          if (finalText) finalTextRef.current = finalText;
-        } catch (err) {
-          console.error("speechmatics stop failed", err);
-          realtimeFailedRef.current = true;
-        }
-      } else if (session) {
-        session.abort();
-      }
-      if (parseTimerRef.current) {
-        clearTimeout(parseTimerRef.current);
-        parseTimerRef.current = null;
-      }
+      const path = await uploadVoiceBlob(supabase, currentUserId, blob);
 
       let transcript: string;
       let passage: ParsedPassage | null;
-      if (!realtimeFailedRef.current && finalTextRef.current) {
-        transcript = finalTextRef.current;
-        passage = parsedRef.current ?? (await parsePassage(transcript));
+      if (realtimeText && realtimeText.trim()) {
+        transcript = realtimeText;
+        passage = parsedRef.current?.reference
+          ? parsedRef.current
+          : await parsePassage(transcript);
       } else {
+        // Realtime failed (null) or heard nothing — Whisper fallback.
         transcript = await transcribe(blob).catch(() => "");
         passage = transcript ? await parsePassage(transcript) : null;
       }
@@ -166,7 +118,7 @@ export default function Composer({
       });
     } catch (err) {
       console.error(err);
-      alert("Couldn't send voice memo.");
+      setError("Couldn't send voice memo.");
     } finally {
       setBusy(false);
     }
@@ -177,16 +129,17 @@ export default function Composer({
     if (!value) return;
     setText("");
     setBusy(true);
+    setError(null);
     try {
       if (replyTarget) {
-        const { error } = await supabase
+        const { error: replyErr } = await supabase
           .from("replies")
           .insert({
             message_id: replyTarget.id,
             user_id: currentUserId,
             body_text: value,
           });
-        if (error) throw error;
+        if (replyErr) throw replyErr;
       } else {
         const passage = await parsePassage(value);
         await insertMessage({
@@ -198,7 +151,7 @@ export default function Composer({
       }
     } catch (err) {
       console.error(err);
-      alert("Couldn't send.");
+      setError("Couldn't send.");
     } finally {
       setBusy(false);
     }
@@ -230,33 +183,35 @@ export default function Composer({
     };
     onOptimistic(optimistic);
 
-    const { data: inserted, error } = await supabase
-      .from("messages")
-      .insert({
-        user_id: currentUserId,
-        reference: args.passage?.reference ?? null,
-        book: args.passage?.book ?? null,
-        chapter: args.passage?.chapter ?? null,
-        verse_start: args.passage?.verse_start ?? null,
-        verse_end: args.passage?.verse_end ?? null,
+    // onInserted reconciles the optimistic id before the share insert, so
+    // the realtime message_shares handler's dedupe sees the real id.
+    await insertLogWithShares(
+      supabase,
+      {
+        userId: currentUserId,
         note: args.note,
-        voice_path: args.voice_path,
         transcript: args.transcript,
-        created_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      })
-      .select("id")
-      .single();
-
-    if (error || !inserted) throw error ?? new Error("insert failed");
-
-    onReconcile(optimisticId, inserted.id);
-
-    const { error: shareErr } = await supabase
-      .from("message_shares")
-      .insert({ message_id: inserted.id, chat_id: chatId, shared_by: currentUserId });
-
-    if (shareErr) throw shareErr;
+        voicePath: args.voice_path,
+        passage: args.passage,
+      },
+      [chatId],
+      { onInserted: (id) => onReconcile(optimisticId, id) },
+    );
   };
+
+  // Send once the post-stop finals settle. Deferred a tick so the state
+  // updates happen outside the effect body itself.
+  useEffect(() => {
+    if (!pendingBlob || recorder.liveTranscribing) return;
+    const blob = pendingBlob;
+    const realtimeText = recorder.realtimeTranscript;
+    const id = setTimeout(() => {
+      setPendingBlob(null);
+      void sendVoice(blob, realtimeText);
+    }, 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingBlob, recorder.liveTranscribing]);
 
   const replyAuthor = replyTarget?.profile?.display_name ?? "Someone";
   const replyPreview =
@@ -265,41 +220,20 @@ export default function Composer({
     replyTarget?.note ??
     (replyTarget?.voice_path ? "Voice memo" : "");
 
+  const recording = recorder.recording;
+  const displayError = error ?? recorder.micError;
+
   return (
     <div className="px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-      {/* {replyTarget ? (
-        <div className="mb-2 flex items-center gap-2 rounded-xl bg-neutral-100 px-3 py-1.5 text-xs">
-          <svg
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            className="h-3.5 w-3.5 shrink-0 text-neutral-500"
-            aria-hidden
-          >
-            <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" />
-          </svg>
-          <div className="min-w-0 flex-1">
-            <div className="text-neutral-500">Replying to {replyAuthor}</div>
-            {replyPreview ? (
-              <div className="truncate text-neutral-700">{replyPreview}</div>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            onClick={onClearReplyTarget}
-            aria-label="Cancel reply"
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-neutral-500 active:bg-neutral-200"
-          >
-            ✕
-          </button>
-        </div>
-      ) : null} */}
-
+      {displayError ? (
+        <p className="pb-1 text-center text-xs text-red-400">{displayError}</p>
+      ) : null}
       <div className="flex items-end gap-2">
         {replyTarget ? null : (
           <button
             type="button"
-            onClick={recording ? stopRecording : startRecording}
-            disabled={busy}
+            onClick={recording ? recorder.stop : startRecording}
+            disabled={busy || (recording && recorder.stopping)}
             aria-label={recording ? "Stop recording" : "Record voice"}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-200 transition-transform duration-150 active:scale-95 disabled:opacity-50"
           >

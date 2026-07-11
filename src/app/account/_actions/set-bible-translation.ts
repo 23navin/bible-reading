@@ -2,8 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createServerSupabase } from "@/lib/db/server";
-import { getAuthUser } from "@/lib/auth/user";
+import { requireUser } from "@/lib/auth/session";
 import { isBibleTranslation } from "@/lib/reading-plan";
 
 export async function setBibleTranslation(formData: FormData) {
@@ -11,14 +10,15 @@ export async function setBibleTranslation(formData: FormData) {
   // The database check constraint would reject unknown values anyway.
   if (!isBibleTranslation(translation)) return;
 
-  const supabase = await createServerSupabase();
-  const user = await getAuthUser(supabase);
-  if (!user) redirect("/login");
+  const { supabase, user } = await requireUser();
 
-  await supabase
+  const { error } = await supabase
     .from("profiles")
     .update({ bible_translation: translation })
     .eq("id", user.id);
+  if (error) {
+    redirect(`/account?error=${encodeURIComponent(error.message)}`);
+  }
 
   // Every page that links to bible.com renders from this profile column.
   revalidatePath("/account");

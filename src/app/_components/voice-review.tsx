@@ -3,12 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/db/client";
-import { DiscardButton } from "@/components/discard-button";
-import { ShareTargets } from "@/components/share-targets";
+import { insertLogWithShares, uploadVoiceBlob, voiceExtension } from "@/lib/db/insert-log";
+import { LogSheet } from "@/components/log-sheet";
+import { useShareTargets } from "@/components/share-targets";
+import { PauseIcon, PlayIcon } from "@/components/icons";
 import { parseReferenceInput, type ParsedPassage } from "@/lib/passage";
 import type { ChatSummary, Me } from "@/lib/types";
-
-const VOICE_BUCKET = "audio-memos";
 
 export default function VoiceReview({
   me,
@@ -109,7 +109,7 @@ export default function VoiceReview({
   }, [transcribing, liveTranscribing, transcript]);
 
   useEffect(() => () => cleanupAbortRef.current?.abort(), []);
-  const [selectedChatIds, setSelectedChatIds] = useState<Set<string>>(new Set());
+  const { selectedChatIds, toggleChat } = useShareTargets();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -203,10 +203,11 @@ export default function VoiceReview({
         // iOS Safari's MediaRecorder produces audio/mp4; Whisper uses the
         // filename extension to detect format, so the name has to match the
         // codec or the request fails.
-        const ext = blob.type.includes("mp4") ? "m4a" : "webm";
         fd.append(
           "file",
-          new File([blob], `memo.${ext}`, { type: blob.type || "audio/webm" }),
+          new File([blob], `memo.${voiceExtension(blob)}`, {
+            type: blob.type || "audio/webm",
+          }),
         );
         let res: Response | null = null;
         for (let attempt = 0; attempt < 2; attempt++) {
@@ -237,15 +238,6 @@ export default function VoiceReview({
     };
   }, [blob, hasRealtime]);
 
-  function toggleChat(id: string) {
-    setSelectedChatIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
   async function send() {
     // A hand-edited reference cleared the model-parsed passage, so validate
     // it the same way the text composer does and rebuild the passage fields
@@ -264,42 +256,18 @@ export default function VoiceReview({
     setSending(true);
     setError(null);
     try {
-      const ext = blob.type.includes("mp4") ? "m4a" : "webm";
-      const path = `${me.id}/${crypto.randomUUID()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from(VOICE_BUCKET)
-        .upload(path, blob, { contentType: blob.type });
-      if (upErr) throw upErr;
-
-      const { data: inserted, error: insErr } = await supabase
-        .from("messages")
-        .insert({
-          user_id: me.id,
+      const path = await uploadVoiceBlob(supabase, me.id, blob);
+      await insertLogWithShares(
+        supabase,
+        {
+          userId: me.id,
           note: null,
-          voice_path: path,
           transcript: transcript || null,
-          reference: finalPassage?.reference ?? null,
-          book: finalPassage?.book ?? null,
-          chapter: finalPassage?.chapter ?? null,
-          verse_start: finalPassage?.verse_start ?? null,
-          verse_end: finalPassage?.verse_end ?? null,
-          created_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        })
-        .select("id")
-        .single();
-      if (insErr || !inserted) throw insErr ?? new Error("insert failed");
-
-      if (selectedChatIds.size > 0) {
-        const shareRows = Array.from(selectedChatIds).map((chat_id) => ({
-          message_id: inserted.id,
-          chat_id,
-          shared_by: me.id,
-        }));
-        const { error: shareErr } = await supabase
-          .from("message_shares")
-          .insert(shareRows);
-        if (shareErr) throw shareErr;
-      }
+          voicePath: path,
+          passage: finalPassage,
+        },
+        selectedChatIds,
+      );
 
       // The insert's DB trigger may have marked a plan day complete, so
       // re-fetch the server-rendered next reading (and chat timestamps).
@@ -324,98 +292,68 @@ export default function VoiceReview({
     transcript.trim().length > 0;
 
   return (
-    <div
-      className={`absolute inset-0 z-30 flex flex-col bg-neutral-900 text-neutral-100 ${
-        exiting ? "screen-fade-out" : "screen-fade-in"
-      }`}
+    <LogSheet
+      exiting={exiting}
+      onClose={onClose}
+      chats={chats}
+      selected={selectedChatIds}
+      onToggle={toggleChat}
+      error={error}
+      submitLabel={
+        sending
+          ? "Logging…"
+          : transcribing || liveTranscribing
+            ? "Transcribing…"
+            : polishing
+              ? "Polishing…"
+              : "Log Reading"
+      }
+      submitDisabled={sending || transcribing || liveTranscribing || polishing}
+      onSubmit={send}
     >
-      <header className="flex items-center justify-end px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
-        <DiscardButton onDiscard={onClose} />
-      </header>
-
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 pb-4">
-        <div className="rounded-2xl bg-neutral-800 px-4 py-2.5">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={togglePlay}
-              aria-label={isPlaying ? "Pause audio" : "Play audio"}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-700 text-neutral-100 active:scale-95"
-            >
-              {isPlaying ? (
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" />
-                  <rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" />
-                </svg>
-              ) : (
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <path d="M8 5v14l12-7z" fill="currentColor" />
-                </svg>
-              )}
-            </button>
-            <input
-              type="text"
-              value={reference ?? ""}
-              onChange={(e) => {
-                userEditedReferenceRef.current = true;
-                setReference(e.target.value);
-                setPassage(null);
-                setError(null);
-              }}
-              readOnly={liveTranscribing}
-              placeholder="Passage Reference"
-              className="min-w-0 flex-1 bg-transparent text-left text-sm font-semibold text-neutral-100 placeholder:text-neutral-500 outline-none"
-            />
-          </div>
-          {transcribing ? (
-            <p className="mt-2 text-sm text-neutral-400">Transcribing…</p>
-          ) : (
-            <textarea
-              value={transcript}
-              onChange={(e) => {
-                userEditedTranscriptRef.current = true;
-                setTranscript(e.target.value);
-              }}
-              readOnly={liveTranscribing}
-              placeholder={liveTranscribing ? "Transcribing…" : "Your thoughts..."}
-              rows={6}
-              className="mt-2 w-full resize-none bg-transparent text-[15px] text-neutral-100 placeholder:text-neutral-500 outline-none"
-            />
-          )}
-        </div>
-        <ShareTargets
-          chats={chats}
-          selected={selectedChatIds}
-          onToggle={toggleChat}
-        />
-        {error ? <p className="text-sm text-red-400">{error}</p> : null}
-        <div className="mt-auto flex gap-2 pt-2">
+      <div className="rounded-2xl bg-neutral-800 px-4 py-2.5">
+        <div className="flex items-center gap-3">
           <button
-            onClick={send}
-            disabled={sending || transcribing || liveTranscribing || polishing}
-            className="flex h-20 w-full items-center justify-center rounded-md bg-neutral-300 font-semibold text-neutral-800 active:bg-blue-500/10 disabled:opacity-50"
+            onClick={togglePlay}
+            aria-label={isPlaying ? "Pause audio" : "Play audio"}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-700 text-neutral-100 active:scale-95"
           >
-            {sending
-              ? "Logging…"
-              : transcribing || liveTranscribing
-                ? "Transcribing…"
-                : polishing
-                  ? "Polishing…"
-                  : "Log Reading"}
+            {isPlaying ? (
+              <PauseIcon className="h-4 w-4" />
+            ) : (
+              <PlayIcon className="h-4 w-4" />
+            )}
           </button>
+          <input
+            type="text"
+            value={reference ?? ""}
+            onChange={(e) => {
+              userEditedReferenceRef.current = true;
+              setReference(e.target.value);
+              setPassage(null);
+              setError(null);
+            }}
+            readOnly={liveTranscribing}
+            placeholder="Passage Reference"
+            className="min-w-0 flex-1 bg-transparent text-left text-sm font-semibold text-neutral-100 placeholder:text-neutral-500 outline-none"
+          />
         </div>
+        {transcribing ? (
+          <p className="mt-2 text-sm text-neutral-400">Transcribing…</p>
+        ) : (
+          <textarea
+            value={transcript}
+            onChange={(e) => {
+              userEditedTranscriptRef.current = true;
+              setTranscript(e.target.value);
+            }}
+            readOnly={liveTranscribing}
+            placeholder={liveTranscribing ? "Transcribing…" : "Your thoughts..."}
+            rows={6}
+            className="mt-2 w-full resize-none bg-transparent text-[15px] text-neutral-100 placeholder:text-neutral-500 outline-none"
+          />
+        )}
       </div>
-    </div>
+    </LogSheet>
   );
 }

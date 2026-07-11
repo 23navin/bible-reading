@@ -5,8 +5,8 @@ import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PROFILE_COOKIE, parseProfileCookie } from "@/lib/auth/profile-cookie";
 import { ProfileCookieSync } from "@/components/profile-cookie";
-import { createServerSupabase } from "@/lib/db/server";
-import { getAuthUser, type AuthUser } from "@/lib/auth/user";
+import { getSession as getBaseSession } from "@/lib/auth/session";
+import type { AuthUser } from "@/lib/auth/user";
 import ArchiveAudioButton from "./_components/archive-audio-button";
 import { ProfileFrame, NameSkeleton } from "@/components/profile-frame";
 import { ArchiveListSkeleton } from "./_components/archive-skeleton";
@@ -30,12 +30,32 @@ type Row = {
   message_shares: { chat_id: string; chats: { id: string; name: string | null } | { id: string; name: string | null }[] | null }[] | null;
 };
 
-type Session = { supabase: SupabaseClient; user: AuthUser | null };
+type Profile = { display_name: string | null; bible_translation: string | null };
+
+type Session = {
+  supabase: SupabaseClient;
+  user: AuthUser | null;
+  // Shared by DisplayName and ArchiveList so the profile row is fetched once.
+  // Kicked off here (not awaited) so it overlaps the messages query.
+  profilePromise: Promise<Profile | null>;
+};
 
 async function getSession(): Promise<Session> {
-  const supabase = await createServerSupabase();
-  const user = await getAuthUser(supabase);
-  return { supabase, user };
+  const { supabase, user } = await getBaseSession();
+  const profilePromise = Promise.resolve(
+    user
+      ? supabase
+          .from("profiles")
+          .select("display_name, bible_translation")
+          .eq("id", user.id)
+          .maybeSingle()
+          .then(
+            ({ data }) => data as Profile | null,
+            () => null,
+          )
+      : null,
+  );
+  return { supabase, user, profilePromise };
 }
 
 // The frame streams immediately on navigation: the only awaited work before
@@ -69,14 +89,10 @@ export default async function ArchivePage({
 }
 
 async function DisplayName({ sessionPromise }: { sessionPromise: Promise<Session> }) {
-  const { supabase, user } = await sessionPromise;
+  const { user, profilePromise } = await sessionPromise;
   if (!user) return null; // ArchiveList handles the login redirect
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("display_name")
-    .eq("id", user.id)
-    .maybeSingle();
+  const profile = await profilePromise;
 
   return (
     <>
@@ -93,12 +109,12 @@ async function ArchiveList({
   sessionPromise: Promise<Session>;
   showAll: boolean;
 }) {
-  const { supabase, user } = await sessionPromise;
+  const { supabase, user, profilePromise } = await sessionPromise;
   if (!user) redirect("/login");
 
   // One extra row past the cap tells us whether a "Show all" link is needed.
   const limit = showAll ? ALL_LIMIT : INITIAL_LIMIT;
-  const [{ data }, { data: profile }] = await Promise.all([
+  const [{ data }, profile] = await Promise.all([
     supabase
       .from("messages")
       .select(
@@ -108,11 +124,7 @@ async function ArchiveList({
       .not("reference", "is", null)
       .order("created_at", { ascending: false })
       .limit(limit + 1),
-    supabase
-      .from("profiles")
-      .select("bible_translation")
-      .eq("id", user.id)
-      .maybeSingle(),
+    profilePromise,
   ]);
   const translation = profile?.bible_translation ?? null;
 

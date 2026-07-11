@@ -1,12 +1,9 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bubble-mine: #0a84ff;
-  --color-bubble-theirs: #2c2c2e;
   /* Matches Tailwind neutral-900 (page backgrounds) and the themeColor in
      src/app/layout.tsx so iOS Safari's status/URL bars blend with the page. */
   --color-app-bg: #171717;
-  --color-app-surface: #2c2c2e;
 }
 
 html,
@@ -29,23 +26,8 @@ button {
   appearance: none;
 }
 
-/* View Transitions: morph the record/type button into the full-screen composer.
-   Activated when state changes are wrapped in startTransition(). */
-::view-transition-group(.composer-morph) {
-  animation-duration: 320ms;
-  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-}
-::view-transition-image-pair(.composer-morph) {
-  animation-name: composer-blur;
-}
-@keyframes composer-blur {
-  30% {
-    filter: blur(2px);
-  }
-}
-
 /* App shell: header / body / footer morph independently between routes.
-   Names match <ViewTransition name="..."> in src/app/_shell.tsx. */
+   Names match <ViewTransition name="..."> in src/components/shell.tsx. */
 ::view-transition-group(app-header),
 ::view-transition-group(app-body),
 ::view-transition-group(app-footer) {

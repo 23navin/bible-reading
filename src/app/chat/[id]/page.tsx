@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { createServerSupabase } from "@/lib/db/server";
-import { getAuthUser } from "@/lib/auth/user";
+import { requireUser } from "@/lib/auth/session";
+import { flattenMembers } from "@/lib/db/chats";
 import { signAudioPaths } from "@/lib/audio/storage";
 import type { Member, Message } from "@/lib/types";
 import ChatView from "./_components/chat-view";
@@ -14,10 +13,7 @@ export default async function ChatRoutePage({
   params: Promise<{ id: string }>;
 }) {
   const { id: chatId } = await params;
-  const supabase = await createServerSupabase();
-
-  const user = await getAuthUser(supabase);
-  if (!user) redirect("/login");
+  const { supabase, user } = await requireUser();
 
   // Share-link flow: idempotently self-join (if not already a member) and
   // return the chat row in one round trip. SECURITY DEFINER inside the RPC
@@ -41,46 +37,45 @@ export default async function ChatRoutePage({
     );
   }
 
-  await supabase.rpc("mark_chat_read", { p_chat_id: chatId });
-
-  const [{ data: memberRows }, { data: viewerProfile }] = await Promise.all([
-    supabase
-      .from("chat_members")
-      .select("profiles(id, display_name)")
-      .eq("chat_id", chatId),
-    supabase
-      .from("profiles")
-      .select("bible_translation")
-      .eq("id", user.id)
-      .maybeSingle(),
-  ]);
+  // mark_chat_read must run after join_chat_via_link (it updates the
+  // membership row the join may have just created) but has no read
+  // dependency, so it runs alongside the page's reads.
+  const [, { data: memberRows }, { data: viewerProfile }, { data: shareRows }] =
+    await Promise.all([
+      supabase.rpc("mark_chat_read", { p_chat_id: chatId }),
+      supabase
+        .from("chat_members")
+        .select("profiles(id, display_name)")
+        .eq("chat_id", chatId),
+      supabase
+        .from("profiles")
+        .select("bible_translation")
+        .eq("id", user.id)
+        .maybeSingle(),
+      // All message_shares for this chat, joined to the full message +
+      // author + reactions + replies.
+      supabase
+        .from("message_shares")
+        .select(
+          `created_at,
+           messages (
+             id, user_id, reference, book, chapter, verse_start, verse_end,
+             note, voice_path, transcript, created_at, created_tz,
+             profile:profiles!messages_user_id_fkey(id, display_name),
+             reactions(message_id, user_id, emoji),
+             replies(id, message_id, user_id, body_text, created_at, profile:profiles!replies_user_id_fkey(id, display_name))
+           )`,
+        )
+        .eq("chat_id", chatId)
+        .order("created_at", { ascending: true })
+        .limit(200),
+    ]);
 
   type MemberRow = { profiles: Member | Member[] | null };
-  const allMembers: Member[] = (memberRows ?? [])
-    .map((row) => {
-      const p = (row as unknown as MemberRow).profiles;
-      return Array.isArray(p) ? p[0] : p;
-    })
-    .filter((p): p is Member => p !== null && p !== undefined);
-  const others = allMembers.filter((m) => m.id !== user.id);
-  const members: Member[] = others.length > 0 ? others : allMembers;
-
-  // Pull all message_shares for this chat, joined to the full message + author + reactions + replies.
-  const { data: shareRows } = await supabase
-    .from("message_shares")
-    .select(
-      `created_at,
-       messages (
-         id, user_id, reference, book, chapter, verse_start, verse_end,
-         note, voice_path, transcript, created_at, created_tz,
-         profile:profiles!messages_user_id_fkey(id, display_name),
-         reactions(message_id, user_id, emoji),
-         replies(id, message_id, user_id, body_text, created_at, profile:profiles!replies_user_id_fkey(id, display_name))
-       )`,
-    )
-    .eq("chat_id", chatId)
-    .order("created_at", { ascending: true })
-    .limit(200);
+  const members: Member[] = flattenMembers(
+    (memberRows ?? []) as unknown as MemberRow[],
+    user.id,
+  );
 
   type ShareRow = { messages: Message | Message[] | null };
   const baseMessages: Message[] = (shareRows ?? [])
